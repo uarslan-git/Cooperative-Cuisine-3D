@@ -628,29 +628,60 @@ private void SpawnKitchenObject(KitchenObject obj)
 
     try
     {
-        GameObject gameObj;
-        
-        // Different prefab types based on category
-        switch (obj.Category?.ToLower())
-        {
-            case "counter":
-                gameObj = GameObject.CreatePrimitive(PrimitiveType.Cube);
-                gameObj.transform.localScale = new Vector3(1.5f, 0.75f, 1.5f);
-                break;
-            case "equipment":
-                gameObj = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
-                gameObj.transform.localScale = new Vector3(1f, 1f, 1f);
-                break;
-            case "ingredient":
-            case "food":
-                gameObj = GameObject.CreatePrimitive(PrimitiveType.Sphere);
-                gameObj.transform.localScale = new Vector3(0.8f, 0.8f, 0.8f);
-                break;
-            default:
-                gameObj = GameObject.CreatePrimitive(PrimitiveType.Cube);
-                gameObj.transform.localScale = new Vector3(1f, 1f, 1f);
-                break;
-        }
+GameObject gameObj = null;
+
+// Try to load a custom model from Resources/Models by Type
+if (!string.IsNullOrEmpty(obj.Type))
+{
+    GameObject prefab = Resources.Load<GameObject>($"Models/{obj.Type}");
+    if (prefab != null)
+    {
+        gameObj = Instantiate(prefab);
+    }
+}
+
+if (gameObj == null)
+{
+    // Fallback to primitive if no model found
+    string modelName = obj.Type?.ToLower();
+    switch (modelName)
+    {
+        case "stove":
+            gameObj = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+            gameObj.transform.localScale = new Vector3(1.2f, 0.7f, 1.2f);
+            break;
+        case "sink":
+            gameObj = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            gameObj.transform.localScale = new Vector3(1.5f, 0.5f, 1.5f);
+            break;
+        case "fridge":
+            gameObj = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            gameObj.transform.localScale = new Vector3(1f, 2f, 1f);
+            break;
+        default:
+            switch (obj.Category?.ToLower())
+            {
+                case "counter":
+                    gameObj = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                    gameObj.transform.localScale = new Vector3(1.5f, 0.75f, 1.5f);
+                    break;
+                case "equipment":
+                    gameObj = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+                    gameObj.transform.localScale = new Vector3(1f, 1f, 1f);
+                    break;
+                case "ingredient":
+                case "food":
+                    gameObj = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+                    gameObj.transform.localScale = new Vector3(0.8f, 0.8f, 0.8f);
+                    break;
+                default:
+                    gameObj = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                    gameObj.transform.localScale = new Vector3(1f, 1f, 1f);
+                    break;
+            }
+            break;
+    }
+}
 
         // Setup common properties
         gameObj.transform.SetParent(transform);
