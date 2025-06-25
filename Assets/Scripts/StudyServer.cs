@@ -628,107 +628,106 @@ private void SpawnKitchenObject(KitchenObject obj)
 
     try
     {
-GameObject gameObj = null;
-
-// Try to load a custom model from Resources/Models by Type
-if (!string.IsNullOrEmpty(obj.Type))
-{
-    GameObject prefab = Resources.Load<GameObject>($"Models/{obj.Type}");
-    if (prefab != null)
-    {
-        gameObj = Instantiate(prefab);
-    }
-}
-
-if (gameObj == null)
-{
-    // Fallback to primitive if no model found
-    string modelName = obj.Type?.ToLower();
-    switch (modelName)
-    {
-        case "stove":
-            gameObj = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
-            gameObj.transform.localScale = new Vector3(1.2f, 0.7f, 1.2f);
-            break;
-        case "sink":
-            gameObj = GameObject.CreatePrimitive(PrimitiveType.Cube);
-            gameObj.transform.localScale = new Vector3(1.5f, 0.5f, 1.5f);
-            break;
-        case "fridge":
-            gameObj = GameObject.CreatePrimitive(PrimitiveType.Cube);
-            gameObj.transform.localScale = new Vector3(1f, 2f, 1f);
-            break;
-        default:
-            switch (obj.Category?.ToLower())
+        GameObject gameObj = null;
+        bool usedPrefab = false;
+        // Try to load a custom model from Resources/Models by Type
+        if (!string.IsNullOrEmpty(obj.Type))
+        {
+            GameObject prefab = Resources.Load<GameObject>($"Models/{obj.Type}");
+            if (prefab != null)
             {
-                case "counter":
-                    gameObj = GameObject.CreatePrimitive(PrimitiveType.Cube);
-                    gameObj.transform.localScale = new Vector3(1.5f, 0.75f, 1.5f);
-                    break;
-                case "equipment":
+                gameObj = Instantiate(prefab);
+                usedPrefab = true;
+            }
+        }
+        if (gameObj == null)
+        {
+            // Fallback to primitive if no model found
+            string modelName = obj.Type?.ToLower();
+            switch (modelName)
+            {
+                case "stove":
                     gameObj = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
-                    gameObj.transform.localScale = new Vector3(1f, 1f, 1f);
+                    gameObj.transform.localScale = new Vector3(1.2f, 0.7f, 1.2f);
                     break;
-                case "ingredient":
-                case "food":
-                    gameObj = GameObject.CreatePrimitive(PrimitiveType.Sphere);
-                    gameObj.transform.localScale = new Vector3(0.8f, 0.8f, 0.8f);
+                case "sink":
+                    gameObj = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                    gameObj.transform.localScale = new Vector3(1.5f, 0.5f, 1.5f);
+                    break;
+                case "fridge":
+                    gameObj = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                    gameObj.transform.localScale = new Vector3(1f, 2f, 1f);
                     break;
                 default:
-                    gameObj = GameObject.CreatePrimitive(PrimitiveType.Cube);
-                    gameObj.transform.localScale = new Vector3(1f, 1f, 1f);
+                    switch (obj.Category?.ToLower())
+                    {
+                        case "counter":
+                            gameObj = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                            gameObj.transform.localScale = new Vector3(1.5f, 0.75f, 1.5f);
+                            break;
+                        case "equipment":
+                            gameObj = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+                            gameObj.transform.localScale = new Vector3(1f, 1f, 1f);
+                            break;
+                        case "ingredient":
+                        case "food":
+                            gameObj = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+                            gameObj.transform.localScale = new Vector3(0.8f, 0.8f, 0.8f);
+                            break;
+                        default:
+                            gameObj = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                            gameObj.transform.localScale = new Vector3(1f, 1f, 1f);
+                            break;
+                    }
                     break;
             }
-            break;
-    }
-}
-
+        }
         // Setup common properties
         gameObj.transform.SetParent(transform);
         gameObj.tag = "KitchenObject";
         gameObj.name = $"{obj.Category}_{obj.Type}_{obj.Id}";
-
         // Position object
         float yPos = gameObj.transform.localScale.y / 2;
         gameObj.transform.position = new Vector3(obj.Pos[0], yPos, obj.Pos[1]);
-
         // Handle rotation
         if (obj.Orientation != null && obj.Orientation.Count >= 2)
         {
             float angle = Mathf.Atan2(obj.Orientation[1], obj.Orientation[0]) * Mathf.Rad2Deg;
             gameObj.transform.rotation = Quaternion.Euler(0, angle, 0);
         }
-
-        // Set color and material properties
-        Renderer renderer = gameObj.GetComponent<Renderer>();
-        Material mat = new Material(Shader.Find("Standard"));
-        renderer.material = mat;
-        
-        // Category-specific colors and materials
-        switch (obj.Category?.ToLower())
+        // Only assign custom material if not using a prefab (i.e., for primitives)
+        if (!usedPrefab)
         {
-            case "counter":
-                mat.color = new Color(0.7f, 0.7f, 0.7f);
-                mat.SetFloat("_Metallic", 0.5f);
-                mat.SetFloat("_Glossiness", 0.5f);
-                break;
-            case "equipment":
-                mat.color = new Color(0.3f, 0.3f, 1.0f);
-                mat.SetFloat("_Metallic", 0.8f);
-                mat.SetFloat("_Glossiness", 0.7f);
-                break;
-            case "ingredient":
-                mat.color = new Color(0.2f, 0.8f, 0.2f);
-                mat.SetFloat("_Metallic", 0.1f);
-                mat.SetFloat("_Glossiness", 0.3f);
-                break;
-            case "food":
-                mat.color = new Color(1.0f, 0.8f, 0.2f);
-                mat.SetFloat("_Metallic", 0.1f);
-                mat.SetFloat("_Glossiness", 0.4f);
-                break;
+            Renderer renderer = gameObj.GetComponent<Renderer>();
+            if (renderer != null)
+            {
+                Material mat = new Material(Shader.Find("Standard"));
+                switch (obj.Category?.ToLower())
+                {
+                    case "counter":
+                        mat.color = new Color(0.7f, 0.7f, 0.7f);
+                        mat.SetFloat("_Metallic", 0.5f);
+                        mat.SetFloat("_Glossiness", 0.5f);
+                        break;
+                    case "equipment":
+                        mat.color = new Color(0.3f, 0.3f, 1.0f);
+                        mat.SetFloat("_Metallic", 0.8f);
+                        mat.SetFloat("_Glossiness", 0.7f);
+                        break;
+                    case "ingredient":
+                        mat.color = new Color(0.2f, 0.8f, 0.2f);
+                        mat.SetFloat("_Metallic", 0.1f);
+                        mat.SetFloat("_Glossiness", 0.3f);
+                        break;
+                    case "food":
+                        mat.color = new Color(1.0f, 0.8f, 0.2f);
+                        mat.SetFloat("_Metallic", 0.1f);
+                        mat.SetFloat("_Glossiness", 0.4f);
+                        break;
+                }
+                renderer.material = mat;
+            }
         }
-
         // Add label
         GameObject label = new GameObject($"{obj.Type}_Label");
         label.transform.SetParent(gameObj.transform);
@@ -741,7 +740,6 @@ if (gameObj == null)
         textMesh.color = Color.black;
         label.transform.localPosition = Vector3.up * (gameObj.transform.localScale.y + 0.1f);
         label.transform.localRotation = Quaternion.Euler(90, 0, 0);
-
         // Add collider for interaction
         gameObj.AddComponent<BoxCollider>();
     }
