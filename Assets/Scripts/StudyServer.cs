@@ -11,6 +11,8 @@ using System.Threading.Tasks;
 
 public class StudyClient : MonoBehaviour
 {
+    // Store the current level info for kitchen size and other properties
+    private LevelInfo levelInfo;
     // Singleton instance
     public static StudyClient Instance { get; private set; }
 
@@ -124,6 +126,15 @@ public class StudyClient : MonoBehaviour
 
         [JsonProperty("level_info")]
         public LevelInfo LevelInfo { get; set; }
+    }
+
+    // Example method to process GetGameConnectionResponse and set levelInfo
+    private void ProcessConnectionResponse(GetGameConnectionResponse response)
+    {
+        if (response != null && response.LevelInfo != null)
+        {
+            levelInfo = response.LevelInfo;
+        }
     }
 
     [System.Serializable]
@@ -590,6 +601,9 @@ private void ProcessWebSocketMessage(string message)
         {
             Debug.Log($"Game State - Level: {state.Level}, Phase: {state.Phase}");
 
+        // If state has LevelInfo, update the field (add this logic if LevelInfo is available in state)
+        // Example: if (state.LevelInfo != null) levelInfo = state.LevelInfo;
+
             if (state.Objects != null)
             {
                 CleanUpKitchenObjects();
@@ -614,6 +628,39 @@ private void ProcessWebSocketMessage(string message)
                     }
                 }
             }
+
+            // Spawn players if present
+            if (state.Players != null)
+            {
+                foreach (var playerObj in state.Players)
+                {
+                    var jobject = playerObj.Value as Newtonsoft.Json.Linq.JObject;
+                    if (jobject != null)
+                    {
+                        PlayerState player = jobject.ToObject<PlayerState>();
+                        SpawnPlayer(player);
+                    }
+                }
+            }
+        }
+
+        // Spawns a player at the given position with WASD movement
+        private void SpawnPlayer(PlayerState player)
+        {
+            if (player?.Pos == null || player.Pos.Count < 2)
+            {
+                Debug.LogWarning("Invalid player data - null or missing position");
+                return;
+            }
+            Vector3 spawnPosition = new Vector3(player.Pos[0], 0, player.Pos[1]);
+            string playerType = "Player"; // You can use player.Id or another property if you have different player prefabs
+            GameObject prefab = Resources.Load<GameObject>($"Players/{playerType}");
+            if (prefab == null)
+                prefab = GameObject.CreatePrimitive(PrimitiveType.Capsule); // fallback
+            GameObject playerObj = Instantiate(prefab, spawnPosition, Quaternion.identity);
+            playerObj.name = $"Player_{player.Id}";
+            playerObj.AddComponent<PlayerController>();
+            playerObj.transform.localScale = playerObj.transform.localScale * 0.5f;
         }
 private void SpawnKitchenObject(KitchenObject obj)
 {
@@ -633,11 +680,13 @@ private void SpawnKitchenObject(KitchenObject obj)
         // Try to load a custom model from Resources/Models by Type
         if (!string.IsNullOrEmpty(obj.Type))
         {
-            GameObject prefab = Resources.Load<GameObject>($"Models/{obj.Type}");
+            GameObject prefab = Resources.Load<GameObject>("Models/" + obj.Type);
             if (prefab != null)
             {
                 gameObj = Instantiate(prefab);
                 usedPrefab = true;
+                // Scale down FBX models loaded from Resources/Models
+                gameObj.transform.localScale = gameObj.transform.localScale * 0.5f;
             }
         }
         if (gameObj == null)
@@ -648,35 +697,35 @@ private void SpawnKitchenObject(KitchenObject obj)
             {
                 case "stove":
                     gameObj = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
-                    gameObj.transform.localScale = new Vector3(1.2f, 0.7f, 1.2f);
+                    gameObj.transform.localScale = new Vector3(1.2f, 0.7f, 1.2f) * 0.5f;
                     break;
                 case "sink":
                     gameObj = GameObject.CreatePrimitive(PrimitiveType.Cube);
-                    gameObj.transform.localScale = new Vector3(1.5f, 0.5f, 1.5f);
+                    gameObj.transform.localScale = new Vector3(1.5f, 0.5f, 1.5f) * 0.5f;
                     break;
                 case "fridge":
                     gameObj = GameObject.CreatePrimitive(PrimitiveType.Cube);
-                    gameObj.transform.localScale = new Vector3(1f, 2f, 1f);
+                    gameObj.transform.localScale = new Vector3(1f, 2f, 1f) * 0.5f;
                     break;
                 default:
                     switch (obj.Category?.ToLower())
                     {
                         case "counter":
                             gameObj = GameObject.CreatePrimitive(PrimitiveType.Cube);
-                            gameObj.transform.localScale = new Vector3(1.5f, 0.75f, 1.5f);
+                            gameObj.transform.localScale = new Vector3(1.5f, 0.75f, 1.5f) * 0.5f;
                             break;
                         case "equipment":
                             gameObj = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
-                            gameObj.transform.localScale = new Vector3(1f, 1f, 1f);
+                            gameObj.transform.localScale = new Vector3(1f, 1f, 1f) * 0.5f;
                             break;
                         case "ingredient":
                         case "food":
                             gameObj = GameObject.CreatePrimitive(PrimitiveType.Sphere);
-                            gameObj.transform.localScale = new Vector3(0.8f, 0.8f, 0.8f);
+                            gameObj.transform.localScale = new Vector3(0.8f, 0.8f, 0.8f) * 0.5f;
                             break;
                         default:
                             gameObj = GameObject.CreatePrimitive(PrimitiveType.Cube);
-                            gameObj.transform.localScale = new Vector3(1f, 1f, 1f);
+                            gameObj.transform.localScale = new Vector3(1f, 1f, 1f) * 0.5f;
                             break;
                     }
                     break;
@@ -693,6 +742,32 @@ private void SpawnKitchenObject(KitchenObject obj)
         if (obj.Orientation != null && obj.Orientation.Count >= 2)
         {
             float angle = Mathf.Atan2(obj.Orientation[1], obj.Orientation[0]) * Mathf.Rad2Deg;
+            gameObj.transform.rotation = Quaternion.Euler(0, angle, 0);
+        }
+        else
+        {
+            // Fallback: rotate based on position/quadrant
+            // Get kitchen size from LevelInfo (fallback to 2000x2000 if not available)
+            float kitchenWidth = 2000f;
+            float kitchenHeight = 2000f;
+            if (levelInfo != null && levelInfo.KitchenSize != null && levelInfo.KitchenSize.Count >= 2)
+            {
+                kitchenWidth = levelInfo.KitchenSize[0];
+                kitchenHeight = levelInfo.KitchenSize[1];
+            }
+            float centerX = kitchenWidth / 2f;
+            float centerZ = kitchenHeight / 2f;
+            float x = obj.Pos[0];
+            float z = obj.Pos[1];
+            float angle = 0f;
+            if (x < centerX && z >= centerZ)
+                angle = 0f;      // top-left
+            else if (x >= centerX && z >= centerZ)
+                angle = 90f;     // top-right
+            else if (x >= centerX && z < centerZ)
+                angle = 180f;    // bottom-right
+            else if (x < centerX && z < centerZ)
+                angle = 270f;    // bottom-left
             gameObj.transform.rotation = Quaternion.Euler(0, angle, 0);
         }
         // Only assign custom material if not using a prefab (i.e., for primitives)
