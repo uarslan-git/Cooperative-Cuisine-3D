@@ -11,6 +11,110 @@ using System.Threading.Tasks;
 
 public class StudyClient : MonoBehaviour
 {
+    // Track counters by id for interaction
+    private Dictionary<string, GameObject> kitchenCounters = new Dictionary<string, GameObject>();
+
+    // Simple holder for player state info (for nearest counter, etc.)
+    public class PlayerStateHolder : MonoBehaviour
+    {
+        public List<float> currentNearestCounterPos;
+        public string currentNearestCounterId;
+    }
+
+    // Simple holder for counter state info (for occupied_by, etc.)
+    public class CounterStateHolder : MonoBehaviour
+    {
+        public string occupiedByType;
+    }
+    // Marker for nearest counter
+    private GameObject nearestCounterMarker;
+    // Track what the local player is holding
+    private GameObject heldItemObj;
+    private string heldItemType;
+    // Reference to the local player GameObject
+    private GameObject localPlayerObj;
+    // Movement speed for the local player
+    private float localPlayerMoveSpeed = 12f;
+    // Reference to the local player's Rigidbody
+    private Rigidbody localPlayerRb;
+
+    void Update()
+    {
+        // Visualize nearest_counter_pos
+        if (localPlayerObj != null && playerObjects.TryGetValue(myPlayerNumber, out var playerObj))
+        {
+            var playerState = playerObj.GetComponent<PlayerStateHolder>();
+            if (playerState != null && playerState.currentNearestCounterPos != null)
+            {
+                Vector3 markerPos = new Vector3(playerState.currentNearestCounterPos[0], 1.2f, playerState.currentNearestCounterPos[1]);
+                if (nearestCounterMarker == null)
+                {
+                    nearestCounterMarker = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+                    nearestCounterMarker.transform.localScale = Vector3.one * 0.4f;
+                    nearestCounterMarker.GetComponent<Renderer>().material.color = Color.yellow;
+                    Destroy(nearestCounterMarker.GetComponent<Collider>());
+                }
+                nearestCounterMarker.transform.position = markerPos;
+                nearestCounterMarker.SetActive(true);
+            }
+            else if (nearestCounterMarker != null)
+            {
+                nearestCounterMarker.SetActive(false);
+            }
+        }
+
+        // Handle E key for pick/place
+        if (Input.GetKeyDown(KeyCode.E) && localPlayerObj != null)
+        {
+            var playerState = localPlayerObj.GetComponent<PlayerStateHolder>();
+            if (playerState != null && playerState.currentNearestCounterId != null)
+            {
+                // Find the counter GameObject
+                if (kitchenCounters.TryGetValue(playerState.currentNearestCounterId, out var counterObj))
+                {
+                    var counterState = counterObj.GetComponent<CounterStateHolder>();
+                    if (heldItemObj == null && counterState != null && counterState.occupiedByType != null)
+                    {
+                        // Pick up item
+                        heldItemType = counterState.occupiedByType;
+                        heldItemObj = counterObj.transform.Find("HeldItem")?.gameObject;
+                        if (heldItemObj != null)
+                            heldItemObj.transform.SetParent(localPlayerObj.transform);
+                        // Send pick action to backend (pseudo)
+                        SendAction($"{{\"action\":\"pick\",\"counter_id\":\"{playerState.currentNearestCounterId}\"}}");
+                    }
+                    else if (heldItemObj != null && counterState != null && counterState.occupiedByType == null)
+                    {
+                        // Place item
+                        heldItemObj.transform.SetParent(counterObj.transform);
+                        heldItemObj.transform.localPosition = Vector3.up * 1.1f;
+                        // Send place action to backend (pseudo)
+                        SendAction($"{{\"action\":\"place\",\"counter_id\":\"{playerState.currentNearestCounterId}\",\"item_type\":\"{heldItemType}\"}}");
+                        heldItemObj = null;
+                        heldItemType = null;
+                    }
+                }
+            }
+        }
+
+        // Handle WASD movement for the local player only
+        if (localPlayerObj != null && localPlayerRb != null)
+        {
+            float h = Input.GetAxis("Horizontal");
+            float v = Input.GetAxis("Vertical");
+            Vector3 move = new Vector3(h, 0, v);
+            if (move.magnitude > 0.01f)
+            {
+                // Update facing direction
+                localPlayerObj.transform.rotation = Quaternion.LookRotation(move, Vector3.up);
+                // Move using physics
+                Vector3 targetPos = localPlayerObj.transform.position + move.normalized * localPlayerMoveSpeed * Time.deltaTime;
+                localPlayerRb.MovePosition(targetPos);
+            }
+        }
+    }
+    // Track player GameObjects by player ID
+    private Dictionary<string, GameObject> playerObjects = new Dictionary<string, GameObject>();
     // Store the current level info for kitchen size and other properties
     private LevelInfo levelInfo;
     // Singleton instance
@@ -529,6 +633,7 @@ private IEnumerator ReceiveWebSocketMessages()
 }
 private void ProcessWebSocketMessage(string message)
 {
+    Debug.Log($"[ProcessWebSocketMessage] Raw message: {message}");
     try 
     {
         Debug.Log($"Processing message length: {message.Length}");
@@ -577,12 +682,20 @@ private void ProcessWebSocketMessage(string message)
             FullKitchenState fullState = JsonConvert.DeserializeObject<FullKitchenState>(message);
             if (fullState?.Counters != null)
             {
-                Debug.Log($"Successfully parsed as FullKitchenState with {fullState.Counters.Count} counters");
+                Debug.Log($"Successfully parsed as FullKitchenState with {fullState.Counters.Count} counters and {fullState.Players?.Count ?? 0} players");
                 SpawnGround(fullState.Kitchen);
                 CleanUpKitchenObjects();
                 foreach (var obj in fullState.Counters)
                 {
                     SpawnKitchenObject(obj);
+                }
+                if (fullState.Players != null)
+                {
+                    foreach (var player in fullState.Players)
+                    {
+                        Debug.Log($"[ProcessWebSocketMessage] Spawning player: {JsonConvert.SerializeObject(player)}");
+                        SpawnOrUpdatePlayer(player);
+                    }
                 }
                 return;
             }
@@ -629,7 +742,7 @@ private void ProcessWebSocketMessage(string message)
                 }
             }
 
-            // Spawn players if present
+            // Spawn or update players if present
             if (state.Players != null)
             {
                 foreach (var playerObj in state.Players)
@@ -638,29 +751,98 @@ private void ProcessWebSocketMessage(string message)
                     if (jobject != null)
                     {
                         PlayerState player = jobject.ToObject<PlayerState>();
-                        SpawnPlayer(player);
+                        SpawnOrUpdatePlayer(player);
                     }
                 }
             }
         }
 
         // Spawns a player at the given position with WASD movement
-        private void SpawnPlayer(PlayerState player)
+        // Spawns or updates a player at the given position
+        private void SpawnOrUpdatePlayer(PlayerState player)
         {
+            Debug.Log($"[SpawnOrUpdatePlayer] Called with player id: {player?.Id}, pos: {JsonConvert.SerializeObject(player?.Pos)}, facing: {JsonConvert.SerializeObject(player?.FacingDirection)}");
             if (player?.Pos == null || player.Pos.Count < 2)
             {
                 Debug.LogWarning("Invalid player data - null or missing position");
                 return;
             }
-            Vector3 spawnPosition = new Vector3(player.Pos[0], 0, player.Pos[1]);
-            string playerType = "Player"; // You can use player.Id or another property if you have different player prefabs
-            GameObject prefab = Resources.Load<GameObject>($"Players/{playerType}");
-            if (prefab == null)
-                prefab = GameObject.CreatePrimitive(PrimitiveType.Capsule); // fallback
-            GameObject playerObj = Instantiate(prefab, spawnPosition, Quaternion.identity);
-            playerObj.name = $"Player_{player.Id}";
-            playerObj.AddComponent<PlayerController>();
-            playerObj.transform.localScale = playerObj.transform.localScale * 0.5f;
+            Vector3 newPosition = new Vector3(player.Pos[0], 0, player.Pos[1]);
+            Debug.Log($"[SpawnOrUpdatePlayer] Spawning at position: {newPosition}");
+            Quaternion newRotation = Quaternion.identity;
+            if (player.FacingDirection != null && player.FacingDirection.Count >= 2)
+            {
+                float angle = Mathf.Atan2(player.FacingDirection[1], player.FacingDirection[0]) * Mathf.Rad2Deg;
+                newRotation = Quaternion.Euler(0, angle, 0);
+            }
+            GameObject playerObj;
+            Debug.Log($"[SpawnOrUpdatePlayer] Called with player id: {player?.Id}, pos: {JsonConvert.SerializeObject(player?.Pos)}, facing: {JsonConvert.SerializeObject(player?.FacingDirection)}");
+            if (playerObjects.TryGetValue(player.Id, out playerObj))
+            {
+                // Always update position and facing from backend JSON
+                playerObj.transform.position = newPosition;
+                // Use facing_direction for rotation if available
+                if (player.FacingDirection != null && player.FacingDirection.Count >= 2)
+                {
+                    float angle = Mathf.Atan2(player.FacingDirection[0], player.FacingDirection[1]) * Mathf.Rad2Deg;
+                    playerObj.transform.rotation = Quaternion.Euler(0, angle, 0);
+                }
+            }
+            else
+            {
+                // Try to load Player{id} prefab
+                string playerType = $"Player{player.Id}";
+                GameObject prefab = Resources.Load<GameObject>($"Players/{playerType}");
+                if (prefab == null)
+                {
+                    Debug.LogWarning($"[SpawnOrUpdatePlayer] Player prefab Players/{playerType} not found, using Capsule fallback");
+                    prefab = GameObject.CreatePrimitive(PrimitiveType.Capsule);
+                }
+                playerObj = Instantiate(prefab, newPosition, Quaternion.identity);
+                Debug.Log($"[SpawnOrUpdatePlayer] Instantiated player object: {playerObj.name} at {playerObj.transform.position}");
+                playerObj.name = $"Player_{player.Id}";
+                playerObj.transform.localScale = playerObj.transform.localScale * 0.5f;
+                // Add CapsuleCollider if missing
+                if (playerObj.GetComponent<Collider>() == null)
+                    playerObj.AddComponent<CapsuleCollider>();
+                // Add Rigidbody if missing
+                Rigidbody rb = playerObj.GetComponent<Rigidbody>();
+                if (rb == null)
+                {
+                    rb = playerObj.AddComponent<Rigidbody>();
+                    rb.constraints = RigidbodyConstraints.FreezeRotationX | RigidbodyConstraints.FreezeRotationZ;
+                }
+                rb.isKinematic = false;
+                playerObjects[player.Id] = playerObj;
+            }
+            // Always update position and facing from backend JSON (even after instantiation)
+            playerObj.transform.position = newPosition;
+            // Use facing_direction for rotation if available
+            if (player.FacingDirection != null && player.FacingDirection.Count >= 2)
+            {
+                float angle = Mathf.Atan2(player.FacingDirection[0], player.FacingDirection[1]) * Mathf.Rad2Deg;
+                playerObj.transform.rotation = Quaternion.Euler(0, angle, 0);
+            }
+
+            // Set the local player reference if this is the local player
+            if (!string.IsNullOrEmpty(myPlayerHash) && player.Id == myPlayerNumber)
+            {
+                localPlayerObj = playerObj;
+                localPlayerRb = playerObj.GetComponent<Rigidbody>();
+            }
+            // Move the camera in front of the player, looking at the player (third-person style)
+            Camera mainCam = Camera.main;
+            if (mainCam != null)
+            {
+                // Offset: further behind and above the player, looking at the player
+                Vector3 camOffset = new Vector3(-2, 9, -12); // 35 units up, 35 units behind
+                Vector3 camPos = playerObj.transform.position + playerObj.transform.rotation * camOffset;
+                mainCam.transform.position = camPos;
+                mainCam.transform.LookAt(playerObj.transform.position + Vector3.up * 2f); // Look at player's head
+                // Optionally, widen the camera's field of view
+                mainCam.fieldOfView = 50f;
+                mainCam.transform.rotation = Quaternion.Euler(45, 0, 0); // Tilt camera down slightly
+            }
         }
 private void SpawnKitchenObject(KitchenObject obj)
 {
@@ -738,36 +920,15 @@ private void SpawnKitchenObject(KitchenObject obj)
         // Position object
         float yPos = gameObj.transform.localScale.y / 2;
         gameObj.transform.position = new Vector3(obj.Pos[0], yPos, obj.Pos[1]);
-        // Handle rotation
+        // Always update position and facing from backend JSON
+        if (obj.Pos != null && obj.Pos.Count >= 2)
+        {
+            float y = gameObj.transform.localScale.y / 2;
+            gameObj.transform.position = new Vector3(obj.Pos[0], y, obj.Pos[1]);
+        }
         if (obj.Orientation != null && obj.Orientation.Count >= 2)
         {
-            float angle = Mathf.Atan2(obj.Orientation[1], obj.Orientation[0]) * Mathf.Rad2Deg;
-            gameObj.transform.rotation = Quaternion.Euler(0, angle, 0);
-        }
-        else
-        {
-            // Fallback: rotate based on position/quadrant
-            // Get kitchen size from LevelInfo (fallback to 2000x2000 if not available)
-            float kitchenWidth = 2000f;
-            float kitchenHeight = 2000f;
-            if (levelInfo != null && levelInfo.KitchenSize != null && levelInfo.KitchenSize.Count >= 2)
-            {
-                kitchenWidth = levelInfo.KitchenSize[0];
-                kitchenHeight = levelInfo.KitchenSize[1];
-            }
-            float centerX = kitchenWidth / 2f;
-            float centerZ = kitchenHeight / 2f;
-            float x = obj.Pos[0];
-            float z = obj.Pos[1];
-            float angle = 0f;
-            if (x < centerX && z >= centerZ)
-                angle = 0f;      // top-left
-            else if (x >= centerX && z >= centerZ)
-                angle = 90f;     // top-right
-            else if (x >= centerX && z < centerZ)
-                angle = 180f;    // bottom-right
-            else if (x < centerX && z < centerZ)
-                angle = 270f;    // bottom-left
+            float angle = Mathf.Atan2(obj.Orientation[0], obj.Orientation[1]) * Mathf.Rad2Deg;
             gameObj.transform.rotation = Quaternion.Euler(0, angle, 0);
         }
         // Only assign custom material if not using a prefab (i.e., for primitives)
@@ -817,6 +978,41 @@ private void SpawnKitchenObject(KitchenObject obj)
         label.transform.localRotation = Quaternion.Euler(90, 0, 0);
         // Add collider for interaction
         gameObj.AddComponent<BoxCollider>();
+
+        // Track counters by id for interaction
+        if (kitchenCounters == null) kitchenCounters = new Dictionary<string, GameObject>();
+        kitchenCounters[obj.Id] = gameObj;
+
+        // Visualize occupied_by item
+        if (obj.OccupiedBy != null && obj.OccupiedBy is Newtonsoft.Json.Linq.JObject itemObj)
+        {
+            string itemType = itemObj["type"]?.ToString();
+            GameObject itemPrefab = Resources.Load<GameObject>($"Items/{itemType}");
+            GameObject itemGo = null;
+            if (itemPrefab != null)
+            {
+                itemGo = Instantiate(itemPrefab, gameObj.transform);
+            }
+            else
+            {
+                itemGo = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                itemGo.transform.SetParent(gameObj.transform);
+                itemGo.transform.localScale = Vector3.one * 0.3f;
+                itemGo.GetComponent<Renderer>().material.color = Color.white;
+            }
+            itemGo.name = "HeldItem";
+            itemGo.transform.localPosition = Vector3.up * 1.1f;
+            // Store type for interaction
+            var state = gameObj.GetComponent<CounterStateHolder>();
+            if (state == null) state = gameObj.AddComponent<CounterStateHolder>();
+            state.occupiedByType = itemType;
+        }
+        else
+        {
+            var state = gameObj.GetComponent<CounterStateHolder>();
+            if (state == null) state = gameObj.AddComponent<CounterStateHolder>();
+            state.occupiedByType = null;
+        }
     }
     catch (Exception e)
     {

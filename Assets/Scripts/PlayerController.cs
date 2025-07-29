@@ -2,6 +2,7 @@ using UnityEngine;
 
 public class PlayerController : MonoBehaviour
 {
+    public string playerId;
     public float moveSpeed = 5f;
 
     void Update()
@@ -10,5 +11,6 @@ public class PlayerController : MonoBehaviour
         float v = Input.GetAxis("Vertical");   // W/S or Up/Down
         Vector3 move = new Vector3(h, 0, v) * moveSpeed * Time.deltaTime;
         transform.position += move;
+        // No camera movement here; camera is handled by StudyServer
     }
 }
