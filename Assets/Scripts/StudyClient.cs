@@ -1,3 +1,4 @@
+
 using UnityEngine;
 using System.Collections;
 using System.Collections.Generic;
@@ -9,8 +10,26 @@ using System.Text;
 using Newtonsoft.Json;
 using System.Threading.Tasks;
 
+// Backend-compatible ActionType and InterActionData enums
+public enum ActionType { movement, pick_up_drop, interact }
+public enum InterActionData { keydown, keyup }
+
 public class StudyClient : MonoBehaviour
 {
+    // Backend-compatible Action class matching Python dataclass exactly
+    [System.Serializable]
+    private class Action
+    {
+        [JsonProperty("player")]
+        public string player;
+        [JsonProperty("action_type")]
+        public string action_type;  // Use string to match Python enum values
+        [JsonProperty("action_data")]
+        public object action_data; // float[], string, or null
+        [JsonProperty("duration")]
+        public float duration;
+    }
+
     // Track counters by id for interaction
     private Dictionary<string, GameObject> kitchenCounters = new Dictionary<string, GameObject>();
 
@@ -28,6 +47,8 @@ public class StudyClient : MonoBehaviour
     }
     // Marker for nearest counter
     private GameObject nearestCounterMarker;
+    // Track previously highlighted counter
+    private GameObject previousHighlightedCounter;
     // Track what the local player is holding
     private GameObject heldItemObj;
     private string heldItemType;
@@ -40,6 +61,12 @@ public class StudyClient : MonoBehaviour
 
     void Update()
     {
+        // Controls (matching Python GUI exactly):
+        // WASD - Move player (A=left[-1,0], D=right[1,0], W=up[0,-1], S=down[0,1])
+        // E - Pick up / Drop items (pickup_key)
+        // F - Interact with counters (interact_key - hold to use cutting boards, stoves, etc.)
+        // R - Send ready signal to start game (manual override)
+        
         // Visualize nearest_counter_pos
         if (localPlayerObj != null && playerObjects.TryGetValue(myPlayerNumber, out var playerObj))
         {
@@ -56,10 +83,47 @@ public class StudyClient : MonoBehaviour
                 }
                 nearestCounterMarker.transform.position = markerPos;
                 nearestCounterMarker.SetActive(true);
+
+                // Reset previous counter color
+                if (previousHighlightedCounter != null)
+                {
+                    var prevRenderer = previousHighlightedCounter.GetComponent<Renderer>();
+                    if (prevRenderer != null)
+                    {
+                        prevRenderer.material.color = new Color(0.7f, 0.7f, 0.7f); // Default counter color
+                    }
+                }
+
+                // Highlight the nearest counter
+                if (playerState.currentNearestCounterId != null && 
+                    kitchenCounters.TryGetValue(playerState.currentNearestCounterId, out var counterObj))
+                {
+                    var renderer = counterObj.GetComponent<Renderer>();
+                    if (renderer != null)
+                    {
+                        renderer.material.color = Color.green; // Highlight color
+                        previousHighlightedCounter = counterObj;
+                    }
+                }
+                else
+                {
+                    previousHighlightedCounter = null;
+                }
             }
             else if (nearestCounterMarker != null)
             {
                 nearestCounterMarker.SetActive(false);
+                
+                // Reset previous counter color
+                if (previousHighlightedCounter != null)
+                {
+                    var renderer = previousHighlightedCounter.GetComponent<Renderer>();
+                    if (renderer != null)
+                    {
+                        renderer.material.color = new Color(0.7f, 0.7f, 0.7f); // Default counter color
+                    }
+                    previousHighlightedCounter = null;
+                }
             }
         }
 
@@ -80,16 +144,16 @@ public class StudyClient : MonoBehaviour
                         heldItemObj = counterObj.transform.Find("HeldItem")?.gameObject;
                         if (heldItemObj != null)
                             heldItemObj.transform.SetParent(localPlayerObj.transform);
-                        // Send pick action to backend (pseudo)
-                        SendAction($"{{\"action\":\"pick\",\"counter_id\":\"{playerState.currentNearestCounterId}\"}}");
+                        // Send pick action to backend
+                        SendPickUpDropAction();
                     }
                     else if (heldItemObj != null && counterState != null && counterState.occupiedByType == null)
                     {
                         // Place item
                         heldItemObj.transform.SetParent(counterObj.transform);
                         heldItemObj.transform.localPosition = Vector3.up * 1.1f;
-                        // Send place action to backend (pseudo)
-                        SendAction($"{{\"action\":\"place\",\"counter_id\":\"{playerState.currentNearestCounterId}\",\"item_type\":\"{heldItemType}\"}}");
+                        // Send place action to backend
+                        SendPickUpDropAction();
                         heldItemObj = null;
                         heldItemType = null;
                     }
@@ -97,19 +161,76 @@ public class StudyClient : MonoBehaviour
             }
         }
 
-        // Handle WASD movement for the local player only
+        // Handle F key for interaction (hold to interact with counters like cutting boards)
+        // Matches Python GUI interact_key behavior exactly
+        if (Input.GetKeyDown(KeyCode.F) && localPlayerObj != null)
+        {
+            var playerState = localPlayerObj.GetComponent<PlayerStateHolder>();
+            if (playerState != null && playerState.currentNearestCounterId != null)
+            {
+                SendInteractAction(InterActionData.keydown);
+            }
+        }
+        
+        if (Input.GetKeyUp(KeyCode.F) && localPlayerObj != null)
+        {
+            var playerState = localPlayerObj.GetComponent<PlayerStateHolder>();
+            if (playerState != null && playerState.currentNearestCounterId != null)
+            {
+                SendInteractAction(InterActionData.keyup);
+            }
+        }
+
+        // Handle R key to send ready manually (for debugging)
+        if (Input.GetKeyDown(KeyCode.R))
+        {
+            Debug.Log("[Update] R key pressed - sending ready message");
+            SendPlayerReady();
+        }
+        
+        // Handle G key to request game state (for debugging)
+        if (Input.GetKeyDown(KeyCode.G))
+        {
+            Debug.Log("[Update] G key pressed - requesting game state");
+            SendGetStateMessage();
+        }
+        
+        // Periodically request game state to keep it updated
+        if (isWebSocketConnected && Time.time - lastStateRequestTime > stateRequestInterval)
+        {
+            lastStateRequestTime = Time.time;
+            SendGetStateMessage();
+        }
+
+        // Handle WASD movement exactly like Python GUI
+        // Python key mappings: A=left[-1,0], D=right[1,0], W=up[0,-1], S=down[0,1]
         if (localPlayerObj != null && localPlayerRb != null)
         {
-            float h = Input.GetAxis("Horizontal");
-            float v = Input.GetAxis("Vertical");
-            Vector3 move = new Vector3(h, 0, v);
-            if (move.magnitude > 0.01f)
+            Vector2 moveVec = Vector2.zero;
+            
+            // Match Python GUI key mappings exactly
+            if (Input.GetKey(KeyCode.A)) moveVec += new Vector2(-1, 0);  // Left
+            if (Input.GetKey(KeyCode.D)) moveVec += new Vector2(1, 0);   // Right  
+            if (Input.GetKey(KeyCode.W)) moveVec += new Vector2(0, -1);  // Up
+            if (Input.GetKey(KeyCode.S)) moveVec += new Vector2(0, 1);   // Down
+            
+            if (moveVec.magnitude > 0.01f)
             {
+                // Normalize movement vector like Python GUI
+                moveVec = moveVec.normalized;
+                
+                // Convert to Unity 3D coordinates (x = horizontal, z = vertical)
+                Vector3 move3D = new Vector3(moveVec.x, 0, moveVec.y);
+                
                 // Update facing direction
-                localPlayerObj.transform.rotation = Quaternion.LookRotation(move, Vector3.up);
-                // Move using physics
-                Vector3 targetPos = localPlayerObj.transform.position + move.normalized * localPlayerMoveSpeed * Time.deltaTime;
-                localPlayerRb.MovePosition(targetPos);
+                localPlayerObj.transform.rotation = Quaternion.LookRotation(move3D, Vector3.up);
+                
+                // For local movement prediction, move the player immediately but let server override
+                Vector3 targetPos = localPlayerObj.transform.position + move3D * localPlayerMoveSpeed * Time.deltaTime;
+                localPlayerObj.transform.position = targetPos;
+                
+                // Send movement action to backend with exact Python format
+                SendMovementAction(new float[] { moveVec.x, moveVec.y }, Time.deltaTime);
             }
         }
     }
@@ -119,6 +240,10 @@ public class StudyClient : MonoBehaviour
     private LevelInfo levelInfo;
     // Singleton instance
     public static StudyClient Instance { get; private set; }
+    
+    // State update timing
+    private float lastStateRequestTime = 0f;
+    private float stateRequestInterval = 1f; // Request state every 1 second
 
     // Configuration
     private string studyServerUrl = "http://localhost:8080";
@@ -346,7 +471,7 @@ public class StudyClient : MonoBehaviour
         public List<float> Pos { get; set; }
 
         [JsonProperty("facing_direction")]
-        public List<int> FacingDirection { get; set; }
+        public List<float> FacingDirection { get; set; }
 
         [JsonProperty("holding")]
         public object Holding { get; set; }
@@ -551,7 +676,10 @@ void Start()
             {
                 isWebSocketConnected = true;
                 Debug.Log("WebSocket connected!");
-                SendGetStateMessage();
+                
+                // Send READY message exactly like Python GUI
+                SendPlayerReady();
+                
                 StartCoroutine(ReceiveWebSocketMessages());
                 connected = true;
             }
@@ -646,9 +774,44 @@ private void ProcessWebSocketMessage(string message)
             Debug.Log($"Fixed message: {message}");
         }
         
-        // First try parsing as GameState since it's more complete
+        // First check if this is a server response message
         try
         {
+            var responseObj = JsonConvert.DeserializeObject<Dictionary<string, object>>(message);
+            if (responseObj.ContainsKey("request_type") && responseObj.ContainsKey("status"))
+            {
+                string requestType = responseObj["request_type"].ToString();
+                int status = Convert.ToInt32(responseObj["status"]);
+                string msg = responseObj.ContainsKey("msg") ? responseObj["msg"].ToString() : "";
+                
+                Debug.Log($"[ProcessWebSocketMessage] Server response: {requestType} - {msg} (status: {status})");
+                
+                if (requestType == "ready" && status == 200)
+                {
+                    Debug.Log("[ProcessWebSocketMessage] Ready message accepted by server!");
+                    // Request game state after ready is accepted, like Python GUI
+                    Debug.Log("[ProcessWebSocketMessage] About to call SendGetStateMessage()");
+                    SendGetStateMessage();
+                }
+                else if (requestType == "action" && status == 200)
+                {
+                    Debug.Log("[ProcessWebSocketMessage] Action accepted by server!");
+                }
+                else if (status != 200)
+                {
+                    Debug.LogWarning($"[ProcessWebSocketMessage] Server rejected {requestType}: {msg}");
+                }
+                return; // Message handled
+            }
+        }
+        catch (JsonException) { /* Continue to try game state formats */ }
+        
+        Debug.Log("[ProcessWebSocketMessage] Not a server response, trying to parse as game state...");
+        
+        // Try parsing as GameState since it's more complete
+        try
+        {
+            Debug.Log("[ProcessWebSocketMessage] Attempting to parse as GameState...");
             GameState gameState = JsonConvert.DeserializeObject<GameState>(message);
             if (gameState?.Objects != null)
             {
@@ -656,12 +819,20 @@ private void ProcessWebSocketMessage(string message)
                 ProcessGameState(gameState);
                 return;
             }
+            else
+            {
+                Debug.Log("[ProcessWebSocketMessage] GameState parsed but Objects is null");
+            }
         }
-        catch (JsonException) { /* Continue to try other formats */ }
+        catch (JsonException ex) 
+        { 
+            Debug.Log($"[ProcessWebSocketMessage] Failed to parse as GameState: {ex.Message}");
+        }
 
         // Try parsing as KitchenState
         try
         {
+            Debug.Log("[ProcessWebSocketMessage] Attempting to parse as KitchenState...");
             KitchenState kitchenState = JsonConvert.DeserializeObject<KitchenState>(message);
             if (kitchenState?.Objects != null)
             {
@@ -673,12 +844,20 @@ private void ProcessWebSocketMessage(string message)
                 }
                 return;
             }
+            else
+            {
+                Debug.Log("[ProcessWebSocketMessage] KitchenState parsed but Objects is null");
+            }
         }
-        catch (JsonException) { /* Continue to try other formats */ }
+        catch (JsonException ex) 
+        { 
+            Debug.Log($"[ProcessWebSocketMessage] Failed to parse as KitchenState: {ex.Message}");
+        }
 
         // Try parsing as FullKitchenState (new format)
         try
         {
+            Debug.Log("[ProcessWebSocketMessage] Attempting to parse as FullKitchenState...");
             FullKitchenState fullState = JsonConvert.DeserializeObject<FullKitchenState>(message);
             if (fullState?.Counters != null)
             {
@@ -691,18 +870,55 @@ private void ProcessWebSocketMessage(string message)
                 }
                 if (fullState.Players != null)
                 {
+                    Debug.Log($"[ProcessWebSocketMessage] Processing {fullState.Players.Count} players from state update");
                     foreach (var player in fullState.Players)
                     {
-                        Debug.Log($"[ProcessWebSocketMessage] Spawning player: {JsonConvert.SerializeObject(player)}");
+                        Debug.Log($"[ProcessWebSocketMessage] Processing player: {JsonConvert.SerializeObject(player)}");
                         SpawnOrUpdatePlayer(player);
                     }
                 }
                 return;
             }
+            else
+            {
+                Debug.Log("[ProcessWebSocketMessage] FullKitchenState parsed but Counters is null");
+            }
         }
-        catch (JsonException) { /* Continue to try other formats */ }
+        catch (JsonException ex) 
+        { 
+            Debug.Log($"[ProcessWebSocketMessage] Failed to parse as FullKitchenState: {ex.Message}");
+        }
 
-        Debug.LogWarning($"Could not parse message as either GameState, KitchenState, or FullKitchenState: {message}");
+        // Try parsing as simple player state update (just players array)
+        try
+        {
+            Debug.Log("[ProcessWebSocketMessage] Attempting to parse as simple player state...");
+            var simpleState = JsonConvert.DeserializeObject<Dictionary<string, object>>(message);
+            if (simpleState.ContainsKey("players"))
+            {
+                var playersArray = simpleState["players"] as Newtonsoft.Json.Linq.JArray;
+                if (playersArray != null)
+                {
+                    Debug.Log($"[ProcessWebSocketMessage] Found {playersArray.Count} players in simple state update");
+                    foreach (var playerToken in playersArray)
+                    {
+                        var player = playerToken.ToObject<PlayerState>();
+                        if (player != null)
+                        {
+                            Debug.Log($"[ProcessWebSocketMessage] Processing player from simple state: {JsonConvert.SerializeObject(player)}");
+                            SpawnOrUpdatePlayer(player);
+                        }
+                    }
+                    return;
+                }
+            }
+        }
+        catch (JsonException ex) 
+        { 
+            Debug.Log($"[ProcessWebSocketMessage] Failed to parse as simple player state: {ex.Message}");
+        }
+
+        Debug.LogWarning($"[ProcessWebSocketMessage] Could not parse message as server response or game state. Full message: {message}");
     }
     catch (Exception e)
     {
@@ -767,7 +983,11 @@ private void ProcessWebSocketMessage(string message)
                 Debug.LogWarning("Invalid player data - null or missing position");
                 return;
             }
-            Vector3 newPosition = new Vector3(player.Pos[0], 0, player.Pos[1]);
+            
+            // Convert game coordinates to Unity coordinates
+            // Game coordinates: (0,0) to (kitchen_width, kitchen_height)
+            // Unity coordinates: (0,0) to (kitchen_width, kitchen_height) but with proper scaling
+            Vector3 newPosition = new Vector3(player.Pos[0], 0.5f, player.Pos[1]); // Y=0.5 to place above ground
             Debug.Log($"[SpawnOrUpdatePlayer] Spawning at position: {newPosition}");
             Quaternion newRotation = Quaternion.identity;
             if (player.FacingDirection != null && player.FacingDirection.Count >= 2)
@@ -779,49 +999,85 @@ private void ProcessWebSocketMessage(string message)
             Debug.Log($"[SpawnOrUpdatePlayer] Called with player id: {player?.Id}, pos: {JsonConvert.SerializeObject(player?.Pos)}, facing: {JsonConvert.SerializeObject(player?.FacingDirection)}");
             if (playerObjects.TryGetValue(player.Id, out playerObj))
             {
-                // Always update position and facing from backend JSON
-                playerObj.transform.position = newPosition;
+                // Only update non-local players from server (to avoid lag/resets)
+                if (string.IsNullOrEmpty(myPlayerNumber) || player.Id != myPlayerNumber)
+                {
+                    // Update remote players directly from server
+                    playerObj.transform.position = newPosition;
+                    Debug.Log($"[SpawnOrUpdatePlayer] Updated REMOTE player {player.Id} position to {newPosition}");
+                }
+                else
+                {
+                    // For local player, only update if position difference is significant (server correction)
+                    float distance = Vector3.Distance(playerObj.transform.position, newPosition);
+                    if (distance > 0.5f) // Only correct if off by more than 0.5 units
+                    {
+                        playerObj.transform.position = newPosition;
+                        Debug.Log($"[SpawnOrUpdatePlayer] Corrected LOCAL player {player.Id} position to {newPosition} (distance: {distance})");
+                    }
+                }
+                
                 // Use facing_direction for rotation if available
                 if (player.FacingDirection != null && player.FacingDirection.Count >= 2)
                 {
-                    float angle = Mathf.Atan2(player.FacingDirection[0], player.FacingDirection[1]) * Mathf.Rad2Deg;
+                    float angle = Mathf.Atan2(player.FacingDirection[1], player.FacingDirection[0]) * Mathf.Rad2Deg;
                     playerObj.transform.rotation = Quaternion.Euler(0, angle, 0);
                 }
             }
             else
             {
-                // Try to load Player{id} prefab
+                // Create new player GameObject
                 string playerType = $"Player{player.Id}";
                 GameObject prefab = Resources.Load<GameObject>($"Players/{playerType}");
                 if (prefab == null)
                 {
                     Debug.LogWarning($"[SpawnOrUpdatePlayer] Player prefab Players/{playerType} not found, using Capsule fallback");
-                    prefab = GameObject.CreatePrimitive(PrimitiveType.Capsule);
+                    // Create a primitive capsule with different colors for different players
+                    GameObject capsule = GameObject.CreatePrimitive(PrimitiveType.Capsule);
+                    // Set different colors for different players
+                    var renderer = capsule.GetComponent<Renderer>();
+                    if (renderer != null)
+                    {
+                        Material mat = new Material(Shader.Find("Standard"));
+                        switch (player.Id)
+                        {
+                            case "0":
+                                mat.color = Color.blue;
+                                break;
+                            case "1":
+                                mat.color = Color.red;
+                                break;
+                            default:
+                                mat.color = Color.green;
+                                break;
+                        }
+                        renderer.material = mat;
+                    }
+                    prefab = capsule;
                 }
                 playerObj = Instantiate(prefab, newPosition, Quaternion.identity);
-                Debug.Log($"[SpawnOrUpdatePlayer] Instantiated player object: {playerObj.name} at {playerObj.transform.position}");
+                Debug.Log($"[SpawnOrUpdatePlayer] Instantiated NEW player object: {playerObj.name} at {playerObj.transform.position}");
                 playerObj.name = $"Player_{player.Id}";
-                playerObj.transform.localScale = playerObj.transform.localScale * 0.5f;
+                playerObj.transform.localScale = playerObj.transform.localScale * 0.8f; // Slightly smaller scale
+                
                 // Add CapsuleCollider if missing
                 if (playerObj.GetComponent<Collider>() == null)
                     playerObj.AddComponent<CapsuleCollider>();
-                // Add Rigidbody if missing
-                Rigidbody rb = playerObj.GetComponent<Rigidbody>();
-                if (rb == null)
+                
+                // Add Rigidbody only for the local player
+                if (!string.IsNullOrEmpty(myPlayerNumber) && player.Id == myPlayerNumber)
                 {
-                    rb = playerObj.AddComponent<Rigidbody>();
-                    rb.constraints = RigidbodyConstraints.FreezeRotationX | RigidbodyConstraints.FreezeRotationZ;
+                    Rigidbody rb = playerObj.GetComponent<Rigidbody>();
+                    if (rb == null)
+                    {
+                        rb = playerObj.AddComponent<Rigidbody>();
+                        rb.constraints = RigidbodyConstraints.FreezeRotationX | RigidbodyConstraints.FreezeRotationZ;
+                    }
+                    // Make kinematic to avoid physics conflicts with server position updates
+                    rb.isKinematic = true;
                 }
-                rb.isKinematic = false;
+                
                 playerObjects[player.Id] = playerObj;
-            }
-            // Always update position and facing from backend JSON (even after instantiation)
-            playerObj.transform.position = newPosition;
-            // Use facing_direction for rotation if available
-            if (player.FacingDirection != null && player.FacingDirection.Count >= 2)
-            {
-                float angle = Mathf.Atan2(player.FacingDirection[0], player.FacingDirection[1]) * Mathf.Rad2Deg;
-                playerObj.transform.rotation = Quaternion.Euler(0, angle, 0);
             }
 
             // Set the local player reference if this is the local player
@@ -830,18 +1086,41 @@ private void ProcessWebSocketMessage(string message)
                 localPlayerObj = playerObj;
                 localPlayerRb = playerObj.GetComponent<Rigidbody>();
             }
-            // Move the camera in front of the player, looking at the player (third-person style)
-            Camera mainCam = Camera.main;
-            if (mainCam != null)
+
+            // Update player state information
+            var playerStateHolder = playerObj.GetComponent<PlayerStateHolder>();
+            if (playerStateHolder == null)
+                playerStateHolder = playerObj.AddComponent<PlayerStateHolder>();
+            
+            // Update nearest counter information from backend
+            if (player.CurrentNearestCounterPos != null)
             {
-                // Offset: further behind and above the player, looking at the player
-                Vector3 camOffset = new Vector3(-2, 9, -12); // 35 units up, 35 units behind
-                Vector3 camPos = playerObj.transform.position + playerObj.transform.rotation * camOffset;
-                mainCam.transform.position = camPos;
-                mainCam.transform.LookAt(playerObj.transform.position + Vector3.up * 2f); // Look at player's head
-                // Optionally, widen the camera's field of view
-                mainCam.fieldOfView = 50f;
-                mainCam.transform.rotation = Quaternion.Euler(45, 0, 0); // Tilt camera down slightly
+                var nearestCounterPosList = player.CurrentNearestCounterPos as Newtonsoft.Json.Linq.JArray;
+                if (nearestCounterPosList != null && nearestCounterPosList.Count >= 2)
+                {
+                    playerStateHolder.currentNearestCounterPos = new List<float> 
+                    { 
+                        (float)nearestCounterPosList[0], 
+                        (float)nearestCounterPosList[1] 
+                    };
+                }
+                else
+                {
+                    playerStateHolder.currentNearestCounterPos = null;
+                }
+            }
+            else
+            {
+                playerStateHolder.currentNearestCounterPos = null;
+            }
+
+            if (player.CurrentNearestCounterId != null)
+            {
+                playerStateHolder.currentNearestCounterId = player.CurrentNearestCounterId.ToString();
+            }
+            else
+            {
+                playerStateHolder.currentNearestCounterId = null;
             }
         }
 private void SpawnKitchenObject(KitchenObject obj)
@@ -867,8 +1146,8 @@ private void SpawnKitchenObject(KitchenObject obj)
             {
                 gameObj = Instantiate(prefab);
                 usedPrefab = true;
-                // Scale down FBX models loaded from Resources/Models
-                gameObj.transform.localScale = gameObj.transform.localScale * 0.5f;
+                // Use original scale for FBX models
+                // gameObj.transform.localScale = gameObj.transform.localScale * 0.5f;
             }
         }
         if (gameObj == null)
@@ -879,35 +1158,35 @@ private void SpawnKitchenObject(KitchenObject obj)
             {
                 case "stove":
                     gameObj = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
-                    gameObj.transform.localScale = new Vector3(1.2f, 0.7f, 1.2f) * 0.5f;
+                    gameObj.transform.localScale = new Vector3(1.2f, 0.7f, 1.2f);
                     break;
                 case "sink":
                     gameObj = GameObject.CreatePrimitive(PrimitiveType.Cube);
-                    gameObj.transform.localScale = new Vector3(1.5f, 0.5f, 1.5f) * 0.5f;
+                    gameObj.transform.localScale = new Vector3(1.5f, 0.5f, 1.5f);
                     break;
                 case "fridge":
                     gameObj = GameObject.CreatePrimitive(PrimitiveType.Cube);
-                    gameObj.transform.localScale = new Vector3(1f, 2f, 1f) * 0.5f;
+                    gameObj.transform.localScale = new Vector3(1f, 2f, 1f);
                     break;
                 default:
                     switch (obj.Category?.ToLower())
                     {
                         case "counter":
                             gameObj = GameObject.CreatePrimitive(PrimitiveType.Cube);
-                            gameObj.transform.localScale = new Vector3(1.5f, 0.75f, 1.5f) * 0.5f;
+                            gameObj.transform.localScale = new Vector3(1.5f, 0.75f, 1.5f);
                             break;
                         case "equipment":
                             gameObj = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
-                            gameObj.transform.localScale = new Vector3(1f, 1f, 1f) * 0.5f;
+                            gameObj.transform.localScale = new Vector3(1f, 1f, 1f);
                             break;
                         case "ingredient":
                         case "food":
                             gameObj = GameObject.CreatePrimitive(PrimitiveType.Sphere);
-                            gameObj.transform.localScale = new Vector3(0.8f, 0.8f, 0.8f) * 0.5f;
+                            gameObj.transform.localScale = new Vector3(0.8f, 0.8f, 0.8f);
                             break;
                         default:
                             gameObj = GameObject.CreatePrimitive(PrimitiveType.Cube);
-                            gameObj.transform.localScale = new Vector3(1f, 1f, 1f) * 0.5f;
+                            gameObj.transform.localScale = new Vector3(1f, 1f, 1f);
                             break;
                     }
                     break;
@@ -917,10 +1196,18 @@ private void SpawnKitchenObject(KitchenObject obj)
         gameObj.transform.SetParent(transform);
         gameObj.tag = "KitchenObject";
         gameObj.name = $"{obj.Category}_{obj.Type}_{obj.Id}";
-        // Position object
+        
+        // Store counters in the dictionary for highlighting
+        if (obj.Category?.ToLower() == "counter")
+        {
+            kitchenCounters[obj.Id] = gameObj;
+        }
+        
+        // Position object at correct coordinates
         float yPos = gameObj.transform.localScale.y / 2;
         gameObj.transform.position = new Vector3(obj.Pos[0], yPos, obj.Pos[1]);
-        // Always update position and facing from backend JSON
+        
+        // Always update position from backend JSON coordinates
         if (obj.Pos != null && obj.Pos.Count >= 2)
         {
             float y = gameObj.transform.localScale.y / 2;
@@ -1022,18 +1309,166 @@ private void SpawnKitchenObject(KitchenObject obj)
 
         public void SendAction(string action)
         {
-            if (isWebSocketConnected)
+            // Only send actions for the Unity-controlled player
+            if (!string.IsNullOrEmpty(myPlayerNumber) && isWebSocketConnected)
             {
-                StartCoroutine(SendWebSocketMessage(action));
+                // Example: parse action string or receive structured input
+                // Here, assume action is a JSON string with keys: action_type, action_data, duration
+                var actionDict = JsonConvert.DeserializeObject<Dictionary<string, object>>(action);
+                var actionTypeStr = actionDict.ContainsKey("action_type") ? actionDict["action_type"].ToString() : "movement";
+                object actionData = null;
+                if (actionTypeStr == "movement" && actionDict.ContainsKey("action_data"))
+                {
+                    var arr = actionDict["action_data"] as Newtonsoft.Json.Linq.JArray;
+                    if (arr != null)
+                        actionData = arr.ToObject<float[]>();
+                }
+                else if (actionTypeStr == "interact" && actionDict.ContainsKey("action_data"))
+                {
+                    actionData = actionDict["action_data"].ToString();
+                }
+                float duration = 0f;
+                if (actionDict.ContainsKey("duration"))
+                    float.TryParse(actionDict["duration"].ToString(), out duration);
+
+                var actionObj = new Action
+                {
+                    player = myPlayerNumber,
+                    action_type = actionTypeStr,
+                    action_data = actionData,
+                    duration = duration
+                };
+                var message = new
+                {
+                    type = "action",
+                    action = actionObj,
+                    player_hash = myPlayerHash
+                };
+                string json = JsonConvert.SerializeObject(message);
+                StartCoroutine(SendWebSocketMessage(json));
+            }
+        }
+
+        // Helper methods for sending backend-compatible actions
+        public void SendMovementAction(float[] moveVector, float duration)
+        {
+            if (!string.IsNullOrEmpty(myPlayerNumber) && !string.IsNullOrEmpty(myPlayerHash) && isWebSocketConnected)
+            {
+                var action = new Action
+                {
+                    player = myPlayerNumber,
+                    action_type = "movement",  // Use string value like Python
+                    action_data = moveVector,
+                    duration = duration
+                };
+                var message = new
+                {
+                    type = "action",  // PlayerRequestType.ACTION.value
+                    action = action,
+                    player_hash = myPlayerHash
+                };
+                string json = JsonConvert.SerializeObject(message);
+                Debug.Log($"[SendMovementAction] Sending movement action: {json}");
+                StartCoroutine(SendWebSocketMessage(json));
+            }
+            else
+            {
+                Debug.LogWarning($"[SendMovementAction] Cannot send movement - myPlayerNumber: {myPlayerNumber}, myPlayerHash: {myPlayerHash}, isWebSocketConnected: {isWebSocketConnected}");
+            }
+        }
+
+        public void SendPickUpDropAction()
+        {
+            if (!string.IsNullOrEmpty(myPlayerNumber) && !string.IsNullOrEmpty(myPlayerHash) && isWebSocketConnected)
+            {
+                var action = new Action
+                {
+                    player = myPlayerNumber,
+                    action_type = "pick_up_drop",  // Use string value like Python
+                    action_data = null,
+                    duration = 0f
+                };
+                var message = new
+                {
+                    type = "action",  // PlayerRequestType.ACTION.value
+                    action = action,
+                    player_hash = myPlayerHash
+                };
+                string json = JsonConvert.SerializeObject(message);
+                Debug.Log($"[SendPickUpDropAction] Sending pick/drop action: {json}");
+                StartCoroutine(SendWebSocketMessage(json));
+            }
+            else
+            {
+                Debug.LogWarning($"[SendPickUpDropAction] Cannot send pick/drop - myPlayerNumber: {myPlayerNumber}, myPlayerHash: {myPlayerHash}, isWebSocketConnected: {isWebSocketConnected}");
+            }
+        }
+
+        public void SendInteractAction(InterActionData interactionData)
+        {
+            if (!string.IsNullOrEmpty(myPlayerNumber) && !string.IsNullOrEmpty(myPlayerHash) && isWebSocketConnected)
+            {
+                var action = new Action
+                {
+                    player = myPlayerNumber,
+                    action_type = "interact",  // Use string value like Python
+                    action_data = interactionData.ToString(),  // Convert enum to string
+                    duration = 0f
+                };
+                var message = new
+                {
+                    type = "action",  // PlayerRequestType.ACTION.value
+                    action = action,
+                    player_hash = myPlayerHash
+                };
+                string json = JsonConvert.SerializeObject(message);
+                Debug.Log($"[SendInteractAction] Sending interact action: {json}");
+                StartCoroutine(SendWebSocketMessage(json));
+            }
+            else
+            {
+                Debug.LogWarning($"[SendInteractAction] Cannot send interact - myPlayerNumber: {myPlayerNumber}, myPlayerHash: {myPlayerHash}, isWebSocketConnected: {isWebSocketConnected}");
+            }
+        }
+
+        public void SendPlayerReady()
+        {
+            if (!string.IsNullOrEmpty(myPlayerHash) && isWebSocketConnected)
+            {
+                // Match exact Python GUI format: PlayerRequestType.READY.value
+                var message = new
+                {
+                    type = "ready",  // PlayerRequestType.READY.value
+                    player_hash = myPlayerHash
+                };
+                string json = JsonConvert.SerializeObject(message);
+                StartCoroutine(SendWebSocketMessage(json));
+                Debug.Log($"[SendPlayerReady] Sent ready message: {json}");
+            }
+            else
+            {
+                Debug.LogWarning($"[SendPlayerReady] Cannot send ready - myPlayerHash: {myPlayerHash}, isWebSocketConnected: {isWebSocketConnected}");
             }
         }
 
         public void SendGetStateMessage()
         {
-            if (!string.IsNullOrEmpty(myPlayerHash))
+            if (!string.IsNullOrEmpty(myPlayerHash) && isWebSocketConnected)
             {
-                GetStateMessage message = new GetStateMessage { PlayerHash = myPlayerHash };
-                StartCoroutine(SendWebSocketMessage(JsonConvert.SerializeObject(message)));
+                // Match exact simple example format for state request (from __init__.py)
+                var message = new
+                {
+                    type = "get_state",
+                    player_hash = myPlayerHash
+                };
+                string json = JsonConvert.SerializeObject(message);
+                Debug.Log($"[SendGetStateMessage] About to send get_state message: {json}");
+                StartCoroutine(SendWebSocketMessage(json));
+                Debug.Log($"[SendGetStateMessage] Called StartCoroutine for get_state message");
+            }
+            else
+            {
+                Debug.LogWarning($"[SendGetStateMessage] Cannot send get_state - myPlayerHash: {myPlayerHash}, isWebSocketConnected: {isWebSocketConnected}");
             }
         }
 
@@ -1071,6 +1506,8 @@ private void SpawnKitchenObject(KitchenObject obj)
         if (groundSpawned) return;
         groundSpawned = true;
 
+        Debug.Log($"SpawnGround: Kitchen dimensions are {kitchen.Width}x{kitchen.Height}");
+
         for (int x = 0; x < kitchen.Width; x++)
         {
             for (int y = 0; y < kitchen.Height; y++)
@@ -1090,6 +1527,28 @@ private void SpawnKitchenObject(KitchenObject obj)
                 // Optional: parent to StudyClient for easy cleanup
                 cube.transform.SetParent(this.transform);
             }
+        }
+    }
+
+    private void PositionCameraForKitchen(KitchenDimensions kitchen)
+    {
+        Camera mainCam = Camera.main;
+        if (mainCam != null)
+        {
+            // Center camera above the kitchen
+            float centerX = (kitchen.Width - 1) / 2f;
+            float centerZ = (kitchen.Height - 1) / 2f;
+            
+            // Position camera high enough to see entire kitchen
+            float cameraHeight = Mathf.Max(kitchen.Width, kitchen.Height) * 1.2f + 5f;
+            
+            mainCam.transform.position = new Vector3(centerX, cameraHeight, centerZ - 2f);
+            mainCam.transform.LookAt(new Vector3(centerX, 0, centerZ));
+            
+            // Adjust field of view based on kitchen size
+            mainCam.fieldOfView = Mathf.Min(60f + Mathf.Max(kitchen.Width, kitchen.Height) * 2f, 90f);
+            
+            Debug.Log($"Positioned camera at {mainCam.transform.position} looking at kitchen center ({centerX}, 0, {centerZ}) with FOV {mainCam.fieldOfView}");
         }
     }
 }
