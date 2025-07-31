@@ -1,5 +1,6 @@
 
 using UnityEngine;
+using UnityEngine.UI;
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine.Networking;
@@ -54,10 +55,25 @@ public class StudyClient : MonoBehaviour
     private string heldItemType;
     // Reference to the local player GameObject
     private GameObject localPlayerObj;
-    // Movement speed for the local player
-    private float localPlayerMoveSpeed = 12f;
+    // Movement speed for the local player (reduced to better match Python GUI)
+    private float localPlayerMoveSpeed = 4f;
     // Reference to the local player's Rigidbody
     private Rigidbody localPlayerRb;
+    
+    // UI Elements for recipe counter, points, and countdown
+    private GameObject uiCanvas;
+    private Text scoreText;
+    private Text countdownText;
+    private Text recipeCounterText;
+    private Text ordersText;
+    private GameObject gameEndPanel;
+    private Text gameEndText;
+    private Button nextLevelButton;
+    private float currentScore = 0f;
+    private float remainingTime = 0f;
+    private int completedRecipes = 0;
+    private List<OrderState> currentOrders = new List<OrderState>();
+    private bool gameEnded = false;
 
     void Update()
     {
@@ -74,7 +90,7 @@ public class StudyClient : MonoBehaviour
             if (playerState != null && playerState.currentNearestCounterPos != null)
             {
                 // Scale the marker position to match kitchen object spacing
-                Vector3 markerPos = new Vector3(playerState.currentNearestCounterPos[0] * 2.0f, 1.2f, playerState.currentNearestCounterPos[1] * 2.0f);
+                Vector3 markerPos = new Vector3(playerState.currentNearestCounterPos[0] * 4.0f, 1.2f, playerState.currentNearestCounterPos[1] * 4.0f);
                 if (nearestCounterMarker == null)
                 {
                     nearestCounterMarker = GameObject.CreatePrimitive(PrimitiveType.Sphere);
@@ -227,14 +243,17 @@ public class StudyClient : MonoBehaviour
                 localPlayerObj.transform.rotation = Quaternion.LookRotation(move3D, Vector3.up);
                 
                 // For local movement prediction, move the player immediately but let server override
-                // Scale movement to match the object scaling factor
-                Vector3 targetPos = localPlayerObj.transform.position + move3D * localPlayerMoveSpeed * Time.deltaTime * 2.0f;
+                // Use normal movement speed without extra scaling
+                Vector3 targetPos = localPlayerObj.transform.position + move3D * localPlayerMoveSpeed * Time.deltaTime;
                 localPlayerObj.transform.position = targetPos;
                 
                 // Send movement action to backend with exact Python format
                 SendMovementAction(new float[] { moveVec.x, moveVec.y }, Time.deltaTime);
             }
         }
+        
+        // Update UI every frame
+        UpdateUI();
     }
     // Track player GameObjects by player ID
     private Dictionary<string, GameObject> playerObjects = new Dictionary<string, GameObject>();
@@ -243,9 +262,9 @@ public class StudyClient : MonoBehaviour
     // Singleton instance
     public static StudyClient Instance { get; private set; }
     
-    // State update timing
+    // State update timing (increased frequency for better sync)
     private float lastStateRequestTime = 0f;
-    private float stateRequestInterval = 1f; // Request state every 1 second
+    private float stateRequestInterval = 0.1f; // Request state every 100ms for better sync
 
     // Configuration
     private string studyServerUrl = "http://localhost:8080";
@@ -531,6 +550,7 @@ void Start()
     if (Instance == this)
     {
         Debug.Log($"StudyServer starting on GameObject: {gameObject.name} at position {transform.position}");
+        CreateUI();
         StartStudy();
     }
 }
@@ -649,7 +669,6 @@ void Start()
 
     IEnumerator ConnectWebSocket(string webSocketUrl)
     {
-        websocket = new ClientWebSocket();
         websocket = new ClientWebSocket();
         cancellationTokenSource = new CancellationTokenSource();
         Uri uri = new Uri(webSocketUrl);
@@ -879,6 +898,21 @@ private void ProcessWebSocketMessage(string message)
                         SpawnOrUpdatePlayer(player);
                     }
                 }
+                
+                // Update UI with game state information
+                currentScore = fullState.Score;
+                remainingTime = fullState.RemainingTime;
+                completedRecipes = fullState.ServedMeals?.Count ?? 0;
+                currentOrders = fullState.Orders ?? new List<OrderState>();
+                gameEnded = fullState.Ended;
+                UpdateUI();
+                
+                // Handle game end
+                if (gameEnded && !gameEndPanel.activeSelf)
+                {
+                    ShowGameEndScreen();
+                }
+                
                 return;
             }
             else
@@ -987,8 +1021,8 @@ private void ProcessWebSocketMessage(string message)
             }
             
             // Convert game coordinates to Unity coordinates with proper spacing
-            // Scale up the positions to match kitchen object spacing (multiply by 2)
-            Vector3 newPosition = new Vector3(player.Pos[0] * 2.0f, 0.5f, player.Pos[1] * 2.0f); // Y=0.5 to place above ground
+            // Scale up the positions to match kitchen object spacing (multiply by 4)
+            Vector3 newPosition = new Vector3(player.Pos[0] * 4.0f, 0.5f, player.Pos[1] * 4.0f); // Y=0.5 to place above ground
             Debug.Log($"[SpawnOrUpdatePlayer] Spawning at position: {newPosition}");
             Quaternion newRotation = Quaternion.identity;
             if (player.FacingDirection != null && player.FacingDirection.Count >= 2)
@@ -1011,10 +1045,15 @@ private void ProcessWebSocketMessage(string message)
                 {
                     // For local player, only update if position difference is significant (server correction)
                     float distance = Vector3.Distance(playerObj.transform.position, newPosition);
-                    if (distance > 0.5f) // Only correct if off by more than 0.5 units
+                    if (distance > 0.5f) // Reduced threshold for more responsive sync
                     {
-                        playerObj.transform.position = newPosition;
-                        Debug.Log($"[SpawnOrUpdatePlayer] Corrected LOCAL player {player.Id} position to {newPosition} (distance: {distance})");
+                        // Smooth lerp to reduce jarring movement
+                        playerObj.transform.position = Vector3.Lerp(playerObj.transform.position, newPosition, Time.deltaTime * 10f);
+                        Debug.Log($"[SpawnOrUpdatePlayer] Smoothly correcting LOCAL player {player.Id} position to {newPosition} (distance: {distance})");
+                    }
+                    else
+                    {
+                        Debug.Log($"[SpawnOrUpdatePlayer] Ignoring LOCAL player {player.Id} position update (distance: {distance} < 0.5)");
                     }
                 }
                 
@@ -1065,17 +1104,19 @@ private void ProcessWebSocketMessage(string message)
                 if (playerObj.GetComponent<Collider>() == null)
                     playerObj.AddComponent<CapsuleCollider>();
                 
-                // Add Rigidbody only for the local player
+                // Add Rigidbody for collision detection with local player
                 if (!string.IsNullOrEmpty(myPlayerNumber) && player.Id == myPlayerNumber)
                 {
                     Rigidbody rb = playerObj.GetComponent<Rigidbody>();
                     if (rb == null)
                     {
                         rb = playerObj.AddComponent<Rigidbody>();
-                        rb.constraints = RigidbodyConstraints.FreezeRotationX | RigidbodyConstraints.FreezeRotationZ;
+                        rb.constraints = RigidbodyConstraints.FreezeRotationX | RigidbodyConstraints.FreezeRotationZ | RigidbodyConstraints.FreezePositionY;
+                        rb.mass = 1f;
+                        rb.linearDamping = 5f; // Add drag to prevent sliding
                     }
-                    // Make kinematic to avoid physics conflicts with server position updates
-                    rb.isKinematic = true;
+                    // Don't make kinematic - we want physics collision
+                    rb.isKinematic = false;
                 }
                 
                 playerObjects[player.Id] = playerObj;
@@ -1159,35 +1200,35 @@ private void SpawnKitchenObject(KitchenObject obj)
             {
                 case "stove":
                     gameObj = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
-                    gameObj.transform.localScale = new Vector3(1.2f, 0.7f, 1.2f);
+                    gameObj.transform.localScale = new Vector3(1.2f, 0.8f, 1.2f); // Slightly bigger
                     break;
                 case "sink":
                     gameObj = GameObject.CreatePrimitive(PrimitiveType.Cube);
-                    gameObj.transform.localScale = new Vector3(1.5f, 0.5f, 1.5f);
+                    gameObj.transform.localScale = new Vector3(1.4f, 0.6f, 1.4f); // Slightly bigger
                     break;
                 case "fridge":
                     gameObj = GameObject.CreatePrimitive(PrimitiveType.Cube);
-                    gameObj.transform.localScale = new Vector3(1f, 2f, 1f);
+                    gameObj.transform.localScale = new Vector3(1.2f, 1.8f, 1.2f); // Slightly bigger
                     break;
                 default:
                     switch (obj.Category?.ToLower())
                     {
                         case "counter":
                             gameObj = GameObject.CreatePrimitive(PrimitiveType.Cube);
-                            gameObj.transform.localScale = new Vector3(1.5f, 0.75f, 1.5f);
+                            gameObj.transform.localScale = new Vector3(1.4f, 0.8f, 1.4f); // Slightly bigger
                             break;
                         case "equipment":
                             gameObj = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
-                            gameObj.transform.localScale = new Vector3(1f, 1f, 1f);
+                            gameObj.transform.localScale = new Vector3(1.2f, 1.2f, 1.2f); // Slightly bigger
                             break;
                         case "ingredient":
                         case "food":
                             gameObj = GameObject.CreatePrimitive(PrimitiveType.Sphere);
-                            gameObj.transform.localScale = new Vector3(0.8f, 0.8f, 0.8f);
+                            gameObj.transform.localScale = new Vector3(0.8f, 0.8f, 0.8f); // Slightly bigger
                             break;
                         default:
                             gameObj = GameObject.CreatePrimitive(PrimitiveType.Cube);
-                            gameObj.transform.localScale = new Vector3(1f, 1f, 1f);
+                            gameObj.transform.localScale = new Vector3(1.2f, 1.2f, 1.2f); // Slightly bigger
                             break;
                     }
                     break;
@@ -1204,14 +1245,32 @@ private void SpawnKitchenObject(KitchenObject obj)
             kitchenCounters[obj.Id] = gameObj;
         }
         
-        // Position object at correct coordinates with proper spacing
+        // Position object at correct coordinates with proper spacing to match Python version
         float yPos = gameObj.transform.localScale.y / 2;
-        // Scale up the positions to spread objects out more (multiply by 2 for better spacing)
-        gameObj.transform.position = new Vector3(obj.Pos[0] * 2.0f, yPos, obj.Pos[1] * 2.0f);
+        // Scale up the positions significantly to match Python map size (multiply by 4 for proper spacing)
+        gameObj.transform.position = new Vector3(obj.Pos[0] * 4.0f, yPos, obj.Pos[1] * 4.0f);
         if (obj.Orientation != null && obj.Orientation.Count >= 2)
         {
             float angle = Mathf.Atan2(obj.Orientation[0], obj.Orientation[1]) * Mathf.Rad2Deg;
             gameObj.transform.rotation = Quaternion.Euler(0, angle, 0);
+        }
+
+        // Add colliders for physics collision (unless it's a primitive which already has one)
+        if (usedPrefab)
+        {
+            BoxCollider collider = gameObj.GetComponent<BoxCollider>();
+            if (collider == null)
+            {
+                collider = gameObj.AddComponent<BoxCollider>();
+            }
+        }
+        
+        // Add Rigidbody to make it a static collision object
+        Rigidbody rb = gameObj.GetComponent<Rigidbody>();
+        if (rb == null)
+        {
+            rb = gameObj.AddComponent<Rigidbody>();
+            rb.isKinematic = true; // Static object - doesn't move
         }
         // Only assign custom material if not using a prefab (i.e., for primitives)
         if (!usedPrefab)
@@ -1504,23 +1563,29 @@ private void SpawnKitchenObject(KitchenObject obj)
         ground.name = "KitchenGround";
         ground.transform.SetParent(transform);
         
-        // Scale the ground to match the scaled kitchen dimensions (multiply by 2 for proper spacing)
+        // Scale the ground to match the scaled kitchen dimensions (multiply by 4 for proper spacing)
         // Plane is 10x10 units by default, so scale accordingly
-        float scaleX = (kitchen.Width * 2.0f) / 10f;
-        float scaleZ = (kitchen.Height * 2.0f) / 10f;
+        float scaleX = (kitchen.Width * 4.0f) / 10f;
+        float scaleZ = (kitchen.Height * 4.0f) / 10f;
         ground.transform.localScale = new Vector3(scaleX, 1f, scaleZ);
         
         // Position at center of scaled kitchen
-        ground.transform.position = new Vector3((kitchen.Width * 2.0f) / 2f, 0f, (kitchen.Height * 2.0f) / 2f);
+        ground.transform.position = new Vector3((kitchen.Width * 4.0f) / 2f, 0f, (kitchen.Height * 4.0f) / 2f);
         
-        // Set ground material
+        // Set ground material to white color
         Renderer renderer = ground.GetComponent<Renderer>();
         if (renderer != null)
         {
+            // Use Unity's default material and set a white color
             Material mat = new Material(Shader.Find("Standard"));
-            mat.color = new Color(0.8f, 0.8f, 0.6f); // Light brown/tan color
+            mat.color = Color.white; // Clean white color
+            mat.SetFloat("_Metallic", 0.0f); // Non-metallic
+            mat.SetFloat("_Smoothness", 0.3f); // Slightly smooth surface
             renderer.material = mat;
         }
+        
+        // Position camera above the kitchen to show the entire map from top-down view
+        PositionCameraForKitchen(kitchen);
         
         groundSpawned = true;
     }
@@ -1528,22 +1593,232 @@ private void SpawnKitchenObject(KitchenObject obj)
     private void PositionCameraForKitchen(KitchenDimensions kitchen)
     {
         Camera mainCam = Camera.main;
-        if (mainCam != null)
+        if (mainCam != null && kitchen != null)
         {
-            // Center camera above the kitchen
-            float centerX = (kitchen.Width - 1) / 2f;
-            float centerZ = (kitchen.Height - 1) / 2f;
+            // Calculate center of the scaled kitchen (remember we use 4x scaling)
+            float centerX = (kitchen.Width * 4.0f) / 2f;
+            float centerZ = (kitchen.Height * 4.0f) / 2f;
             
-            // Position camera high enough to see entire kitchen
-            float cameraHeight = Mathf.Max(kitchen.Width, kitchen.Height) * 1.2f + 5f;
+            // Position camera at 45-degree angle for better view
+            float kitchenSize = Mathf.Max(kitchen.Width * 4.0f, kitchen.Height * 4.0f);
+            float cameraHeight = kitchenSize * 0.6f + 8f; // Adjust height for 45-degree view
+            float cameraDistance = kitchenSize * 0.4f; // Distance back from center for 45-degree angle
             
-            mainCam.transform.position = new Vector3(centerX, cameraHeight, centerZ - 2f);
-            mainCam.transform.LookAt(new Vector3(centerX, 0, centerZ));
+            // Set camera position at 45-degree angle to the kitchen
+            mainCam.transform.position = new Vector3(centerX, cameraHeight, centerZ - cameraDistance);
             
-            // Adjust field of view based on kitchen size
-            mainCam.fieldOfView = Mathf.Min(60f + Mathf.Max(kitchen.Width, kitchen.Height) * 2f, 90f);
+            // Look at the kitchen center with 45-degree angle
+            mainCam.transform.rotation = Quaternion.Euler(45f, 0f, 0f);
             
-            Debug.Log($"Positioned camera at {mainCam.transform.position} looking at kitchen center ({centerX}, 0, {centerZ}) with FOV {mainCam.fieldOfView}");
+            // Adjust camera to orthographic for better top-down view (optional)
+            if (mainCam.orthographic == false)
+            {
+                mainCam.orthographic = true;
+                mainCam.orthographicSize = kitchenSize * 0.6f; // Adjust size to fit kitchen nicely
+            }
+            
+            Debug.Log($"[PositionCamera] Set camera to position: {mainCam.transform.position}, rotation: {mainCam.transform.rotation}, orthographic size: {mainCam.orthographicSize}");
         }
+    }
+    
+    private void CreateUI()
+    {
+        // Create UI Canvas
+        uiCanvas = new GameObject("GameUI");
+        Canvas canvas = uiCanvas.AddComponent<Canvas>();
+        canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+        canvas.sortingOrder = 100;
+        uiCanvas.AddComponent<CanvasScaler>();
+        uiCanvas.AddComponent<GraphicRaycaster>();
+        
+        // Score display (top left)
+        GameObject scoreObj = new GameObject("ScoreText");
+        scoreObj.transform.SetParent(uiCanvas.transform);
+        scoreText = scoreObj.AddComponent<Text>();
+        scoreText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        scoreText.fontSize = 24;
+        scoreText.color = Color.white;
+        scoreText.text = "Score: 0";
+        
+        RectTransform scoreRect = scoreObj.GetComponent<RectTransform>();
+        scoreRect.anchorMin = new Vector2(0, 1);
+        scoreRect.anchorMax = new Vector2(0, 1);
+        scoreRect.anchoredPosition = new Vector2(120, -30);
+        scoreRect.sizeDelta = new Vector2(200, 50);
+        
+        // Countdown display (top center)
+        GameObject countdownObj = new GameObject("CountdownText");
+        countdownObj.transform.SetParent(uiCanvas.transform);
+        countdownText = countdownObj.AddComponent<Text>();
+        countdownText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        countdownText.fontSize = 28;
+        countdownText.color = Color.yellow;
+        countdownText.text = "Time: --:--";
+        countdownText.alignment = TextAnchor.MiddleCenter;
+        
+        RectTransform countdownRect = countdownObj.GetComponent<RectTransform>();
+        countdownRect.anchorMin = new Vector2(0.5f, 1);
+        countdownRect.anchorMax = new Vector2(0.5f, 1);
+        countdownRect.anchoredPosition = new Vector2(0, -30);
+        countdownRect.sizeDelta = new Vector2(200, 50);
+        
+        // Recipe counter display (top right)
+        GameObject recipeObj = new GameObject("RecipeCounterText");
+        recipeObj.transform.SetParent(uiCanvas.transform);
+        recipeCounterText = recipeObj.AddComponent<Text>();
+        recipeCounterText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        recipeCounterText.fontSize = 24;
+        recipeCounterText.color = Color.green;
+        recipeCounterText.text = "Completed: 0";
+        recipeCounterText.alignment = TextAnchor.MiddleRight;
+        
+        RectTransform recipeRect = recipeObj.GetComponent<RectTransform>();
+        recipeRect.anchorMin = new Vector2(1, 1);
+        recipeRect.anchorMax = new Vector2(1, 1);
+        recipeRect.anchoredPosition = new Vector2(-120, -30);
+        recipeRect.sizeDelta = new Vector2(200, 50);
+        
+        // Orders display (right side)
+        GameObject ordersObj = new GameObject("OrdersText");
+        ordersObj.transform.SetParent(uiCanvas.transform);
+        ordersText = ordersObj.AddComponent<Text>();
+        ordersText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        ordersText.fontSize = 18;
+        ordersText.color = Color.cyan;
+        ordersText.text = "Orders:\n";
+        ordersText.alignment = TextAnchor.UpperLeft;
+        
+        RectTransform ordersRect = ordersObj.GetComponent<RectTransform>();
+        ordersRect.anchorMin = new Vector2(1, 0.5f);
+        ordersRect.anchorMax = new Vector2(1, 0.5f);
+        ordersRect.anchoredPosition = new Vector2(-10, 0);
+        ordersRect.sizeDelta = new Vector2(300, 400);
+        
+        // Game End Panel
+        gameEndPanel = new GameObject("GameEndPanel");
+        gameEndPanel.transform.SetParent(uiCanvas.transform);
+        gameEndPanel.SetActive(false);
+        
+        // Background for game end panel
+        Image panelBg = gameEndPanel.AddComponent<Image>();
+        panelBg.color = new Color(0, 0, 0, 0.8f);
+        
+        RectTransform panelRect = gameEndPanel.GetComponent<RectTransform>();
+        panelRect.anchorMin = Vector2.zero;
+        panelRect.anchorMax = Vector2.one;
+        panelRect.offsetMin = Vector2.zero;
+        panelRect.offsetMax = Vector2.zero;
+        
+        // Game End Text
+        GameObject gameEndTextObj = new GameObject("GameEndText");
+        gameEndTextObj.transform.SetParent(gameEndPanel.transform);
+        gameEndText = gameEndTextObj.AddComponent<Text>();
+        gameEndText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        gameEndText.fontSize = 36;
+        gameEndText.color = Color.white;
+        gameEndText.text = "Game Ended!";
+        gameEndText.alignment = TextAnchor.MiddleCenter;
+        
+        RectTransform gameEndTextRect = gameEndTextObj.GetComponent<RectTransform>();
+        gameEndTextRect.anchorMin = new Vector2(0.5f, 0.6f);
+        gameEndTextRect.anchorMax = new Vector2(0.5f, 0.6f);
+        gameEndTextRect.anchoredPosition = Vector2.zero;
+        gameEndTextRect.sizeDelta = new Vector2(600, 100);
+        
+        // Next Level Button
+        GameObject buttonObj = new GameObject("NextLevelButton");
+        buttonObj.transform.SetParent(gameEndPanel.transform);
+        nextLevelButton = buttonObj.AddComponent<Button>();
+        
+        Image buttonImg = buttonObj.AddComponent<Image>();
+        buttonImg.color = Color.blue;
+        
+        RectTransform buttonRect = buttonObj.GetComponent<RectTransform>();
+        buttonRect.anchorMin = new Vector2(0.5f, 0.4f);
+        buttonRect.anchorMax = new Vector2(0.5f, 0.4f);
+        buttonRect.anchoredPosition = Vector2.zero;
+        buttonRect.sizeDelta = new Vector2(200, 60);
+        
+        // Button Text
+        GameObject buttonTextObj = new GameObject("ButtonText");
+        buttonTextObj.transform.SetParent(buttonObj.transform);
+        Text buttonText = buttonTextObj.AddComponent<Text>();
+        buttonText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        buttonText.fontSize = 20;
+        buttonText.color = Color.white;
+        buttonText.text = "Next Level";
+        buttonText.alignment = TextAnchor.MiddleCenter;
+        
+        RectTransform buttonTextRect = buttonTextObj.GetComponent<RectTransform>();
+        buttonTextRect.anchorMin = Vector2.zero;
+        buttonTextRect.anchorMax = Vector2.one;
+        buttonTextRect.offsetMin = Vector2.zero;
+        buttonTextRect.offsetMax = Vector2.zero;
+        
+        // Add button click handler
+        nextLevelButton.onClick.AddListener(StartNextLevel);
+    }
+    
+    private void UpdateUI()
+    {
+        if (scoreText != null)
+            scoreText.text = $"Score: {currentScore:F0}";
+            
+        if (countdownText != null)
+        {
+            if (remainingTime > 0)
+            {
+                int minutes = Mathf.FloorToInt(remainingTime / 60f);
+                int seconds = Mathf.FloorToInt(remainingTime % 60f);
+                countdownText.text = $"Time: {minutes:00}:{seconds:00}";
+            }
+            else
+            {
+                countdownText.text = "Time: 00:00";
+            }
+        }
+        
+        if (recipeCounterText != null)
+            recipeCounterText.text = $"Completed: {completedRecipes}";
+        
+        if (ordersText != null)
+        {
+            string ordersList = "Orders:\n";
+            foreach (var order in currentOrders)
+            {
+                ordersList += $"• {order.Meal} (Score: {order.Score})\n";
+            }
+            ordersText.text = ordersList;
+        }
+    }
+
+    private void ShowGameEndScreen()
+    {
+        gameEndPanel.SetActive(true);
+        gameEndText.text = $"Level Complete!\nFinal Score: {currentScore:F0}\nRecipes Completed: {completedRecipes}";
+    }
+
+    private void StartNextLevel()
+    {
+        gameEndPanel.SetActive(false);
+        gameEnded = false;
+        
+        // Reset game state
+        currentScore = 0f;
+        remainingTime = 0f;
+        completedRecipes = 0;
+        currentOrders.Clear();
+        
+        // Clean up current objects
+        CleanUpKitchenObjects();
+        foreach (var player in playerObjects.Values)
+        {
+            if (player != null)
+                Destroy(player);
+        }
+        playerObjects.Clear();
+        
+        // Start new study session
+        StartStudy();
     }
 }
