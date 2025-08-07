@@ -9,7 +9,7 @@ using NativeWebSocket;
 public class StudyClient : MonoBehaviour
 {
     public string studyHost = "localhost";
-    public int studyPort = 8001;
+    public int studyPort = 8080;
     public string participantId;
     public int numPlayers = 1;
     public string myPlayerId;
@@ -20,7 +20,9 @@ public class StudyClient : MonoBehaviour
 
     void Start()
     {
+        // participantId = Guid.NewGuid().ToString();
         participantId = Guid.NewGuid().ToString();
+        participantId = "d8c146a9-c2c0-40ec-b7b8-4f9647e4d25a";
         StartCoroutine(StartStudy());
     }
 
