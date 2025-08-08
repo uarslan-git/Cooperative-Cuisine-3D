@@ -12,7 +12,7 @@ public class StudyClient : MonoBehaviour
     public string studyHost = "localhost";
     public int studyPort = 8080;
     public string participantId;
-    public int numPlayers = 1;
+    public int numPlayers = 2;
     public string myPlayerId;
 
     public Action<StateRepresentation> OnStateReceived;
@@ -21,7 +21,8 @@ public class StudyClient : MonoBehaviour
     
     private Dictionary<string, GameObject> spawnedObjects = new Dictionary<string, GameObject>();
     private StateRepresentation lastState;
-
+    private float scalingX, scalingY = 1.5F;
+    
     void Start()
     {
         // Ensure there is a camera in the scene
@@ -31,7 +32,7 @@ public class StudyClient : MonoBehaviour
             GameObject cameraObj = new GameObject("Main Camera");
             cameraObj.AddComponent<Camera>();
             cameraObj.tag = "MainCamera";
-            cameraObj.transform.position = new Vector3(5, 15, 5);
+            cameraObj.transform.position = new Vector3(6, 15, -2);
             cameraObj.transform.rotation = Quaternion.Euler(60, 0, 0);
         }
 
