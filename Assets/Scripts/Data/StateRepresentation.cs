@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Newtonsoft.Json;
 
 [Serializable]
 public class StateRepresentation
@@ -23,7 +24,7 @@ public class PlayerState
 {
     public string id;
     public List<float> pos;
-    public List<int> facing_direction;
+    public List<float> facing_direction; // Changed from int to float
     public ItemState holding;
     public List<float> current_nearest_counter_pos;
     public string current_nearest_counter_id;
@@ -43,7 +44,8 @@ public class CounterState
     public string type;
     public List<float> pos;
     public List<int> orientation;
-    public ItemState occupied_by;
+    [JsonConverter(typeof(SingleOrArrayConverter<ItemState>))]
+    public List<ItemState> occupied_by;
     public List<EffectState> active_effects;
 }
 

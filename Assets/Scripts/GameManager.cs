@@ -56,7 +56,13 @@ public class GameManager : MonoBehaviour
         {
             foreach (var c in lastState.counters)
             {
-                if (c.occupied_by != null) activeItemIds.Add(c.occupied_by.id);
+                if (c.occupied_by != null)
+                {
+                    foreach (var item in c.occupied_by)
+                    {
+                        activeItemIds.Add(item.id);
+                    }
+                }
             }
         }
 
@@ -128,11 +134,14 @@ public class GameManager : MonoBehaviour
 
                 if (counterState.occupied_by != null)
                 {
-                    UpdateItem(counterState.occupied_by, counterObj.transform);
-                    if (counterState.occupied_by.progress_percentage > 0)
+                    foreach (var itemState in counterState.occupied_by)
                     {
-                        activeProgressIds.Add(counterState.occupied_by.id);
-                        UpdateProgressBar(counterState.occupied_by.id, items[counterState.occupied_by.id].transform, counterState.occupied_by.progress_percentage);
+                        UpdateItem(itemState, counterObj.transform);
+                        if (itemState.progress_percentage > 0)
+                        {
+                            activeProgressIds.Add(itemState.id);
+                            UpdateProgressBar(itemState.id, items[itemState.id].transform, itemState.progress_percentage);
+                        }
                     }
                 }
             }
@@ -179,17 +188,34 @@ public class GameManager : MonoBehaviour
         Slider progressBar;
         if (!progressBars.ContainsKey(id))
         {
-            GameObject progressBarObj = Instantiate(progressBarPrefab);
+            // Create a world space canvas
+            GameObject canvasObj = new GameObject($"ProgressBarCanvas_{id}");
+            Canvas canvas = canvasObj.AddComponent<Canvas>();
+            canvas.renderMode = RenderMode.WorldSpace;
+            canvasObj.AddComponent<CanvasScaler>().dynamicPixelsPerUnit = 10;
+            canvasObj.AddComponent<LookAtCamera>(); // Add the script to make it face the camera
+
+            // Instantiate the progress bar prefab as a child of the canvas
+            GameObject progressBarObj = Instantiate(progressBarPrefab, canvasObj.transform);
             progressBar = progressBarObj.GetComponentInChildren<Slider>();
             progressBars.Add(id, progressBar);
+
+            // Configure the canvas rect
+            RectTransform canvasRect = canvasObj.GetComponent<RectTransform>();
+            canvasRect.position = parent.position + Vector3.up * 1.2f;
+            canvasRect.sizeDelta = new Vector2(1, 0.3f);
+            canvasRect.localScale = new Vector3(0.01f, 0.01f, 0.01f);
         }
         else
         {
             progressBar = progressBars[id];
         }
 
-        progressBar.transform.position = parent.position + Vector3.up * 1.0f;
+        // Update progress value
         progressBar.value = progress / 100f;
+        
+        // Ensure the canvas is active
+        progressBar.transform.root.gameObject.SetActive(true);
     }
 
     private void UpdateOrders()
