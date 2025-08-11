@@ -11,6 +11,7 @@ public class GameManager : MonoBehaviour
     public TextMeshProUGUI timeText;
     public Transform ordersContainer;
     public GameObject orderTextPrefab;
+    public float scaleFactor = 0.1f;
 
     private Dictionary<string, GameObject> players = new Dictionary<string, GameObject>();
     private Dictionary<string, GameObject> counters = new Dictionary<string, GameObject>();
@@ -28,6 +29,22 @@ public class GameManager : MonoBehaviour
             Debug.LogError("ProgressBar prefab not found in Resources/Prefabs!");
         }
         orderTextPrefab.SetActive(false);
+    }
+
+    private GameObject InstantiateAndScale(GameObject prefab, Vector3 position, Quaternion rotation)
+    {
+        GameObject obj = Instantiate(prefab, position, rotation);
+        ScaleObject(obj);
+        return obj;
+    }
+
+    private void ScaleObject(GameObject obj)
+    {
+        obj.transform.localScale = Vector3.one * scaleFactor;
+        foreach (Transform child in obj.transform)
+        {
+            child.transform.localScale = Vector3.one;
+        }
     }
 
     void HandleStateReceived(StateRepresentation state)
@@ -85,7 +102,7 @@ public class GameManager : MonoBehaviour
                 if (!players.ContainsKey(playerState.id))
                 {
                     GameObject playerPrefab = Resources.Load<GameObject>("Prefabs/Player");
-                    playerObj = Instantiate(playerPrefab, new Vector3(playerState.pos[0], 0.5f, playerState.pos[1]), Quaternion.identity);
+                    playerObj = InstantiateAndScale(playerPrefab, new Vector3(playerState.pos[0], 0.5f, playerState.pos[1]), Quaternion.identity);
                     players.Add(playerState.id, playerObj);
                     if (playerState.id == studyClient.myPlayerId)
                     {
@@ -96,6 +113,7 @@ public class GameManager : MonoBehaviour
                 {
                     playerObj = players[playerState.id];
                     playerObj.transform.position = new Vector3(playerState.pos[0], 0.5f, playerState.pos[1]);
+                    ScaleObject(playerObj);
                 }
 
                 if (playerState.holding != null)
@@ -124,12 +142,13 @@ public class GameManager : MonoBehaviour
                         counterPrefab = GameObject.CreatePrimitive(PrimitiveType.Cube);
                         counterPrefab.name = counterState.type;
                     }
-                    counterObj = Instantiate(counterPrefab, new Vector3(counterState.pos[0], 0.5f, counterState.pos[1]), Quaternion.identity);
+                    counterObj = InstantiateAndScale(counterPrefab, new Vector3(counterState.pos[0], 0.5f, counterState.pos[1]), Quaternion.identity);
                     counters.Add(counterState.id, counterObj);
                 }
                 else
                 {
                     counterObj = counters[counterState.id];
+                    ScaleObject(counterObj);
                 }
 
                 if (counterState.occupied_by != null)
@@ -168,14 +187,14 @@ public class GameManager : MonoBehaviour
                 Debug.LogWarning($"Prefab for item type '{itemState.type}' not found. Using default sphere.");
                 itemPrefab = GameObject.CreatePrimitive(PrimitiveType.Sphere);
                 itemPrefab.name = itemState.type;
-                itemPrefab.transform.localScale = new Vector3(0.5f, 0.5f, 0.5f);
             }
-            itemObj = Instantiate(itemPrefab);
+            itemObj = InstantiateAndScale(itemPrefab, Vector3.zero, Quaternion.identity);
             items.Add(itemState.id, itemObj);
         }
         else
         {
             itemObj = items[itemState.id];
+            ScaleObject(itemObj);
         }
 
         itemObj.transform.SetParent(parent);
