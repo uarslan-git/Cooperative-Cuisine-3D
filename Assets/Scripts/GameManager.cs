@@ -12,12 +12,15 @@ public class GameManager : MonoBehaviour
     public Transform ordersContainer;
     public GameObject orderTextPrefab;
 
+    public Dictionary<string, GameObject> items = new Dictionary<string, GameObject>();
+    public Dictionary<string, GameObject> counters = new Dictionary<string, GameObject>();
+    public StateRepresentation lastState;
+
     private Dictionary<string, GameObject> players = new Dictionary<string, GameObject>();
-    private Dictionary<string, GameObject> counters = new Dictionary<string, GameObject>();
-    private Dictionary<string, GameObject> items = new Dictionary<string, GameObject>();
     private Dictionary<string, Slider> progressBars = new Dictionary<string, Slider>();
     private GameObject progressBarPrefab;
-    private StateRepresentation lastState;
+
+    private bool floorInstantiated = false;
 
     void Start()
     {
@@ -26,15 +29,6 @@ public class GameManager : MonoBehaviour
         if (progressBarPrefab == null)
         {
             Debug.LogError("ProgressBar prefab not found in Resources/Prefabs!");
-        }
-        GameObject floorPrefab = Resources.Load<GameObject>("Prefabs/Floor");
-        if (floorPrefab != null)
-        {
-            Instantiate(floorPrefab);
-        }
-        else
-        {
-            Debug.LogError("Floor prefab not found in Resources/Prefabs!");
         }
         orderTextPrefab.SetActive(false);
     }
@@ -48,6 +42,22 @@ public class GameManager : MonoBehaviour
     void UpdateWorld()
     {
         if (lastState == null) return;
+
+        if (!floorInstantiated && lastState.kitchen != null)
+        {
+            GameObject floorPrefab = Resources.Load<GameObject>("Prefabs/Floor");
+            if (floorPrefab != null)
+            {
+                float centerX = (lastState.kitchen.width - 1) / 2.0f;
+                float centerZ = (lastState.kitchen.height - 1) / 2.0f;
+                Instantiate(floorPrefab, new Vector3(centerX, 0, centerZ), Quaternion.identity);
+                floorInstantiated = true;
+            }
+            else
+            {
+                Debug.LogError("Floor prefab not found in Resources/Prefabs!");
+            }
+        }
 
         scoreText.text = $"Score: {lastState.score}";
         timeText.text = $"Time: {Mathf.FloorToInt(lastState.remaining_time)}";
@@ -91,20 +101,23 @@ public class GameManager : MonoBehaviour
             foreach (var playerState in lastState.players)
             {
                 GameObject playerObj;
+                float invertedPlayerZ = (lastState.kitchen.height - 1) - playerState.pos[1];
                 if (!players.ContainsKey(playerState.id))
                 {
                     GameObject playerPrefab = Resources.Load<GameObject>("Prefabs/Player");
-                    playerObj = Instantiate(playerPrefab, new Vector3(playerState.pos[0], 0.5f, playerState.pos[1]), Quaternion.identity);
+                    playerObj = Instantiate(playerPrefab, new Vector3(playerState.pos[0], 0.5f, invertedPlayerZ), Quaternion.identity);
                     players.Add(playerState.id, playerObj);
                     if (playerState.id == studyClient.myPlayerId)
                     {
-                        playerObj.AddComponent<PlayerController>().studyClient = studyClient;
+                        PlayerController pc = playerObj.AddComponent<PlayerController>();
+                        pc.studyClient = studyClient;
+                        pc.gameManager = this;
                     }
                 }
                 else
                 {
                     playerObj = players[playerState.id];
-                    playerObj.transform.position = new Vector3(playerState.pos[0], 0.5f, playerState.pos[1]);
+                    playerObj.transform.position = new Vector3(playerState.pos[0], 0.5f, invertedPlayerZ);
                 }
 
                 if (playerState.holding != null)
@@ -133,7 +146,8 @@ public class GameManager : MonoBehaviour
                         counterPrefab = GameObject.CreatePrimitive(PrimitiveType.Cube);
                         counterPrefab.name = counterState.type;
                     }
-                    counterObj = Instantiate(counterPrefab, new Vector3(counterState.pos[0], 0.5f, counterState.pos[1]), Quaternion.identity);
+                    float invertedCounterZ = (lastState.kitchen.height - 1) - counterState.pos[1];
+                    counterObj = Instantiate(counterPrefab, new Vector3(counterState.pos[0], 0.5f, invertedCounterZ), Quaternion.identity);
                     counters.Add(counterState.id, counterObj);
                 }
                 else
