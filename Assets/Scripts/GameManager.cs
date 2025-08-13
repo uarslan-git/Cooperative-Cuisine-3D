@@ -27,6 +27,15 @@ public class GameManager : MonoBehaviour
         {
             Debug.LogError("ProgressBar prefab not found in Resources/Prefabs!");
         }
+        GameObject floorPrefab = Resources.Load<GameObject>("Prefabs/Floor");
+        if (floorPrefab != null)
+        {
+            Instantiate(floorPrefab);
+        }
+        else
+        {
+            Debug.LogError("Floor prefab not found in Resources/Prefabs!");
+        }
         orderTextPrefab.SetActive(false);
     }
 

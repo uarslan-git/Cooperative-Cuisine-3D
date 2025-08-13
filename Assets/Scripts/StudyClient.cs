@@ -19,10 +19,6 @@ public class StudyClient : MonoBehaviour
     private GameConnectionData gameConnectionData;
     private WebSocket websocket;
     
-    private Dictionary<string, GameObject> spawnedObjects = new Dictionary<string, GameObject>();
-    private StateRepresentation lastState;
-    private float scalingX, scalingY = 1.5F;
-    
     void Start()
     {
         // Ensure there is a camera in the scene
@@ -36,7 +32,7 @@ public class StudyClient : MonoBehaviour
             cameraObj.transform.rotation = Quaternion.Euler(60, 0, 0);
         }
 
-        OnStateReceived += RenderGameState;
+        // OnStateReceived += RenderGameState;
         participantId = Guid.NewGuid().ToString();
         StartCoroutine(StartStudy());
     }
@@ -51,20 +47,7 @@ public class StudyClient : MonoBehaviour
         }
     }
 
-    void OnGUI()
-    {
-        if (lastState != null && lastState.orders != null)
-        {
-            GUI.Box(new Rect(10, 10, 150, 30), $"Score: {lastState.score}");
-            GUI.Box(new Rect(10, 50, 200, 150), "Orders");
-            for (int i = 0; i < lastState.orders.Count; i++)
-            {
-                var order = lastState.orders[i];
-                float timeRemaining = order.max_duration - (float.Parse(lastState.env_time) - float.Parse(order.start_time));
-                GUI.Label(new Rect(20, 80 + (i * 20), 180, 20), $"{order.meal} ({timeRemaining:F1}s)");
-            }
-        }
-    }
+    
 
     IEnumerator StartStudy()
     {
@@ -199,102 +182,6 @@ public class StudyClient : MonoBehaviour
         }
     }
     
-    private void RenderGameState(StateRepresentation state)
-    {
-        if (state == null)
-        {
-            Debug.LogWarning("RenderGameState called with a null state.");
-            return;
-        }
-
-        lastState = state;
-        foreach (var obj in spawnedObjects.Values)
-        {
-            Destroy(obj);
-        }
-        spawnedObjects.Clear();
-
-        // Render Floor
-        GameObject floorPrefab = Resources.Load<GameObject>("Prefabs/Floor");
-        GameObject floor = floorPrefab ? Instantiate(floorPrefab) : CreateTextPlaceholder("Floor");
-        if (state.kitchen != null)
-        {
-            floor.transform.position = new Vector3(state.kitchen.width / 2f - 0.5f, 0, state.kitchen.height / 2f - 0.5f);
-            if (!floorPrefab)
-            {
-                 floor.transform.localScale = new Vector3(state.kitchen.width, 1, state.kitchen.height);
-            }
-        }
-        spawnedObjects.Add("floor", floor);
-
-        // Render Counters
-        if (state.counters != null)
-        {
-            foreach (var counter in state.counters)
-            {
-                GameObject prefab = Resources.Load<GameObject>($"Prefabs/{counter.type}");
-                GameObject counterObj = prefab ? Instantiate(prefab) : CreateTextPlaceholder(counter.type);
-                
-                counterObj.transform.position = new Vector3(counter.pos[0], 0, counter.pos[1]);
-                if (counter.orientation != null && counter.orientation.Count > 1)
-                {
-                    counterObj.transform.rotation = Quaternion.Euler(0, counter.orientation[1] * 90, 0);
-                }
-                counterObj.name = $"Counter_{counter.type}_{counter.id}";
-                spawnedObjects.Add(counter.id, counterObj);
-
-                if (counter.occupied_by != null)
-                {
-                    foreach (var item in counter.occupied_by)
-                    {
-                        RenderItem(item, counterObj.transform.position + Vector3.up * 1f);
-                    }
-                }
-            }
-        }
-
-        // Render Players
-        if (state.players != null)
-        {
-            foreach (var player in state.players)
-            {
-                GameObject prefab = Resources.Load<GameObject>("Prefabs/Player");
-                GameObject playerObj = prefab ? Instantiate(prefab) : CreateTextPlaceholder("Player");
-
-                playerObj.transform.position = new Vector3(player.pos[0], 0, player.pos[1]);
-                playerObj.name = $"Player_{player.id}";
-                spawnedObjects.Add(player.id, playerObj);
-
-                if (player.holding != null)
-                {
-                    RenderItem(player.holding, playerObj.transform.position + Vector3.up * 1.5f);
-                }
-            }
-        }
-    }
-
-    private void RenderItem(ItemState item, Vector3 position)
-    {
-        GameObject prefab = Resources.Load<GameObject>($"Prefabs/{item.type}");
-        GameObject itemObj = prefab ? Instantiate(prefab) : CreateTextPlaceholder(item.type);
-
-        itemObj.transform.position = position;
-        itemObj.name = $"Item_{item.type}_{item.id}";
-        spawnedObjects.Add(item.id, itemObj);
-    }
-
-    private GameObject CreateTextPlaceholder(string objectName)
-    {
-        GameObject textObj = new GameObject(objectName + " (Missing Prefab)");
-        TextMesh textMesh = textObj.AddComponent<TextMesh>();
-        textMesh.text = objectName;
-        textMesh.anchor = TextAnchor.MiddleCenter;
-        textMesh.fontSize = 10;
-        textMesh.color = Color.red;
-        textObj.transform.localScale = new Vector3(0.1f, 0.1f, 0.1f);
-        return textObj;
-    }
-
     private async void OnApplicationQuit()
     {
         if (websocket != null)
