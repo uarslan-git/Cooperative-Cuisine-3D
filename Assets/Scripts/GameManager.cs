@@ -105,7 +105,7 @@ public class GameManager : MonoBehaviour
                 if (!players.ContainsKey(playerState.id))
                 {
                     GameObject playerPrefab = Resources.Load<GameObject>("Prefabs/Player");
-                    playerObj = Instantiate(playerPrefab, new Vector3(playerState.pos[0], 0.5f, invertedPlayerZ), Quaternion.identity);
+                    playerObj = Instantiate(playerPrefab, new Vector3(playerState.pos[0], 0, invertedPlayerZ), Quaternion.identity);
                     players.Add(playerState.id, playerObj);
                     if (playerState.id == studyClient.myPlayerId)
                     {
@@ -117,8 +117,11 @@ public class GameManager : MonoBehaviour
                 else
                 {
                     playerObj = players[playerState.id];
-                    playerObj.transform.position = new Vector3(playerState.pos[0], 0.5f, invertedPlayerZ);
+                    playerObj.transform.position = new Vector3(playerState.pos[0], 0, invertedPlayerZ);
                 }
+
+                // Update player rotation
+                playerObj.transform.rotation = Quaternion.LookRotation(new Vector3(playerState.facing_direction[0], 0, -playerState.facing_direction[1]));
 
                 if (playerState.holding != null)
                 {
@@ -147,7 +150,8 @@ public class GameManager : MonoBehaviour
                         counterPrefab.name = counterState.type;
                     }
                     float invertedCounterZ = (lastState.kitchen.height - 1) - counterState.pos[1];
-                    counterObj = Instantiate(counterPrefab, new Vector3(counterState.pos[0], 0.5f, invertedCounterZ), Quaternion.identity);
+                    Quaternion counterRotation = Quaternion.LookRotation(new Vector3(counterState.orientation[0], 0, -counterState.orientation[1]));
+                    counterObj = Instantiate(counterPrefab, new Vector3(counterState.pos[0], 0, invertedCounterZ), counterRotation);
                     counters.Add(counterState.id, counterObj);
                 }
                 else
@@ -202,8 +206,16 @@ public class GameManager : MonoBehaviour
         }
 
         itemObj.transform.SetParent(parent);
-        itemObj.transform.localPosition = Vector3.zero;
         itemObj.transform.localRotation = Quaternion.identity;
+
+        if (parent.name == "HoldingSpot")
+        {
+            itemObj.transform.localPosition = Vector3.zero;
+        }
+        else
+        {
+            itemObj.transform.localPosition = new Vector3(0, 0.5f, 0);
+        }
     }
 
     private void UpdateProgressBar(string id, Transform parent, float progress)
