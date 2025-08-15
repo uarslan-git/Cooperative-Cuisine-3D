@@ -237,7 +237,6 @@ public class GameManager : MonoBehaviour
 
             // Configure the canvas rect
             RectTransform canvasRect = canvasObj.GetComponent<RectTransform>();
-            canvasRect.position = parent.position + Vector3.up * 1.2f;
             canvasRect.sizeDelta = new Vector2(1, 0.3f);
             canvasRect.localScale = new Vector3(0.01f, 0.01f, 0.01f);
         }
@@ -245,6 +244,9 @@ public class GameManager : MonoBehaviour
         {
             progressBar = progressBars[id];
         }
+
+        // Update position every frame
+        progressBar.transform.root.position = parent.position + Vector3.up * 1.5f;
 
         // Update progress value
         progressBar.value = progress / 100f;
