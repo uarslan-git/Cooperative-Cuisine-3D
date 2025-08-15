@@ -214,7 +214,7 @@ public class GameManager : MonoBehaviour
         }
         else
         {
-            itemObj.transform.localPosition = new Vector3(0, 0.5f, 0);
+            itemObj.transform.localPosition = new Vector3(0, 1f, 0);
         }
     }
 
