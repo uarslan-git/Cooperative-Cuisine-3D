@@ -14,10 +14,13 @@ public class StudyClient : MonoBehaviour
     public string participantId;
     public int numPlayers = 2;
     public string myPlayerId;
+    public string myPlayerHash;
 
     public Action<StateRepresentation> OnStateReceived;
     private GameConnectionData gameConnectionData;
     private WebSocket websocket;
+
+    public GameManager gameManager;
     
     void Start()
     {
@@ -32,7 +35,13 @@ public class StudyClient : MonoBehaviour
             cameraObj.transform.rotation = Quaternion.Euler(60, 0, 0);
         }
 
-        // OnStateReceived += RenderGameState;
+        gameManager = FindFirstObjectByType<GameManager>();
+
+        if (gameManager != null)
+        {
+            OnStateReceived += gameManager.HandleStateReceived;
+        }
+
         participantId = Guid.NewGuid().ToString();
         StartCoroutine(StartStudy());
     }
@@ -62,6 +71,7 @@ public class StudyClient : MonoBehaviour
             else
             {
                 Debug.Log("Study started successfully.");
+                Debug.Log($"Start Study Response: {webRequest.downloadHandler.text}");
                 StartCoroutine(GetGameConnection());
             }
         }
@@ -80,6 +90,7 @@ public class StudyClient : MonoBehaviour
             else
             {
                 string jsonResponse = webRequest.downloadHandler.text;
+                Debug.Log($"Get Game Connection Response: {jsonResponse}");
                 gameConnectionData = JsonConvert.DeserializeObject<GameConnectionData>(jsonResponse);
                 Debug.Log("Game connection data received.");
                 ConnectToGameServer();
@@ -94,6 +105,7 @@ public class StudyClient : MonoBehaviour
         {
             websocketUrl = player.websocket_url;
             myPlayerId = player.player_id;
+            myPlayerHash = player.player_hash;
             break;
         }
 
@@ -118,6 +130,7 @@ public class StudyClient : MonoBehaviour
         websocket.OnMessage += (bytes) =>
         {
             var message = Encoding.UTF8.GetString(bytes);
+            Debug.Log($"Received State Message: {message}");
             // The server sends the raw state, not a wrapped message object.
             try
             {
@@ -150,13 +163,7 @@ public class StudyClient : MonoBehaviour
 
     public void SendAction(Action action)
     {
-        string playerHash = "";
-        foreach (var player in gameConnectionData.player_info.Values)
-        {
-            playerHash = player.player_hash;
-            break;
-        }
-        WebsocketMessage message = new WebsocketMessage { type = "action", player_hash = playerHash, action = action };
+        WebsocketMessage message = new WebsocketMessage { type = "action", player_hash = myPlayerHash, action = action };
         SendWebSocketMessage(JsonConvert.SerializeObject(message));
     }
     
@@ -200,3 +207,38 @@ public class StudyClient : MonoBehaviour
     }
 }
 
+
+[Serializable]
+public class GameConnectionData
+{
+    public string env_id;
+    public Dictionary<string, PlayerInfo> player_info;
+    public List<List<List<string>>> recipe_graphs;
+    public List<int> kitchen_size;
+}
+
+[Serializable]
+public class PlayerInfo
+{
+    public string client_id;
+    public string player_hash;
+    public string player_id;
+    public string websocket_url;
+}
+
+[Serializable]
+public class WebsocketMessage
+{
+    public string type;
+    public string player_hash;
+    public Action action;
+    public Dictionary<string, string> player_info_update;
+}
+
+[Serializable]
+public class Action
+{
+    public string player;
+    public string type;
+    public object action_data;
+}

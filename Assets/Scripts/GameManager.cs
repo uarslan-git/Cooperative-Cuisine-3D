@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.InputSystem;
 using UnityEngine.UI;
 using System.Collections.Generic;
 using System.Linq;
@@ -33,7 +34,7 @@ public class GameManager : MonoBehaviour
         orderTextPrefab.SetActive(false);
     }
 
-    void HandleStateReceived(StateRepresentation state)
+    public void HandleStateReceived(StateRepresentation state)
     {
         lastState = state;
         UpdateWorld();
@@ -109,14 +110,17 @@ public class GameManager : MonoBehaviour
                     players.Add(playerState.id, playerObj);
                     if (playerState.id == studyClient.myPlayerId)
                     {
-                        PlayerController pc = playerObj.AddComponent<PlayerController>();
-                        pc.studyClient = studyClient;
-                        pc.gameManager = this;
+                        PlayerInputController pic = GetComponent<PlayerInputController>();
+                        if (pic != null)
+                        {
+                            pic.controlledPlayerGameObject = playerObj;
+                        }
                     }
-                }
+                    }
                 else
                 {
                     playerObj = players[playerState.id];
+                    Debug.Log($"Updating player {playerState.id} position from {playerObj.transform.position} to ({playerState.pos[0]}, 0, {invertedPlayerZ})");
                     playerObj.transform.position = new Vector3(playerState.pos[0], 0, invertedPlayerZ);
                 }
 

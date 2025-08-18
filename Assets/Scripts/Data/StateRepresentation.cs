@@ -25,6 +25,7 @@ public class PlayerState
     public string id;
     public List<float> pos;
     public List<float> facing_direction; // Changed from int to float
+    [JsonConverter(typeof(JsonSubtypeConverter<ItemState>))]
     public ItemState holding;
     public List<float> current_nearest_counter_pos;
     public string current_nearest_counter_id;
@@ -44,7 +45,7 @@ public class CounterState
     public string type;
     public List<float> pos;
     public List<int> orientation;
-    [JsonConverter(typeof(SingleOrArrayConverter<ItemState>))]
+    [JsonConverter(typeof(SingleOrArrayOfSubtypeConverter<ItemState>))]
     public List<ItemState> occupied_by;
     public List<EffectState> active_effects;
 }
@@ -58,6 +59,11 @@ public class ItemState
     public float progress_percentage;
     public bool inverse_progress;
     public List<EffectState> active_effects;
+}
+
+[Serializable]
+public class CookingEquipmentState : ItemState
+{
     public List<ItemState> content_list;
     public ItemState content_ready;
 }

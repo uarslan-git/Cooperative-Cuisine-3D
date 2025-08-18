@@ -1,6 +1,7 @@
 using UnityEngine;
 using UnityEngine.InputSystem;
 using System.Linq;
+using System.Collections.Generic;
 
 public class PlayerController : MonoBehaviour
 {
@@ -66,8 +67,7 @@ public class PlayerController : MonoBehaviour
             {
                 player = studyClient.myPlayerId,
                 type = "movement",
-                action_data = new float[] { move.x, move.y },
-                duration = Time.deltaTime
+                action_data = new System.Collections.Generic.List<float> { move.x, move.y }
             };
             studyClient.SendAction(action);
         }

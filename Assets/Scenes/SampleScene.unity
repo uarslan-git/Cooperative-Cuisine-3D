@@ -130,6 +130,8 @@ GameObject:
   - component: {fileID: 183303085}
   - component: {fileID: 183303087}
   - component: {fileID: 183303086}
+  - component: {fileID: 183303089}
+  - component: {fileID: 183303088}
   m_Layer: 0
   m_Name: _GameManager
   m_TagString: Untagged
@@ -169,6 +171,19 @@ MonoBehaviour:
   timeText: {fileID: 594147140}
   ordersContainer: {fileID: 595361924}
   orderTextPrefab: {fileID: 270278180}
+  lastState:
+    players: []
+    counters: []
+    kitchen:
+      width: 0
+      height: 0
+    score: 0
+    orders: []
+    ended: 0
+    env_time: 
+    remaining_time: 0
+    view_restrictions: []
+    all_players_ready: 0
 --- !u!114 &183303087
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -186,6 +201,52 @@ MonoBehaviour:
   participantId: 
   numPlayers: 1
   myPlayerId: 0
+  myPlayerHash: 
+  gameManager: {fileID: 183303086}
+--- !u!114 &183303088
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 183303083}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 62899f850307741f2a39c98a8b639597, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  m_Actions: {fileID: -944628639613478452, guid: 052faaac586de48259a63d0c4782560b, type: 3}
+  m_NotificationBehavior: 0
+  m_UIInputModule: {fileID: 0}
+  m_DeviceLostEvent:
+    m_PersistentCalls:
+      m_Calls: []
+  m_DeviceRegainedEvent:
+    m_PersistentCalls:
+      m_Calls: []
+  m_ControlsChangedEvent:
+    m_PersistentCalls:
+      m_Calls: []
+  m_ActionEvents: []
+  m_NeverAutoSwitchControlSchemes: 0
+  m_DefaultControlScheme: 
+  m_DefaultActionMap: Player
+  m_SplitScreenIndex: -1
+  m_Camera: {fileID: 0}
+--- !u!114 &183303089
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 183303083}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 869312da75525d014bc02811c0d42630, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  studyClient: {fileID: 183303087}
+  controlledPlayerGameObject: {fileID: 0}
 --- !u!1 &270278180
 GameObject:
   m_ObjectHideFlags: 0

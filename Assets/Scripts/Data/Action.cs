@@ -5,4 +5,5 @@ public class Action
     public string type;
     public object action_data;
     public float duration;
+    public string player_hash;
 }
