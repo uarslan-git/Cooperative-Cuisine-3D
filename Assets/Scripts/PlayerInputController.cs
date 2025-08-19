@@ -73,8 +73,8 @@ public class PlayerInputController : MonoBehaviour
         Action action = new Action
         {
             player = studyClient.myPlayerId,
-            type = "movement",
-            action_data = new float[] { move.x, move.y },
+            action_type = "movement",
+            action_data = new System.Collections.Generic.List<float> { move.x, move.y },
             duration = 1.0f,
             player_hash = studyClient.myPlayerHash
         };
@@ -88,7 +88,7 @@ public class PlayerInputController : MonoBehaviour
         Action action = new Action
         {
             player = studyClient.myPlayerId,
-            type = actionType,
+            action_type = actionType,
             action_data = null,
             duration = 0.0f,
             player_hash = studyClient.myPlayerHash

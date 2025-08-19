@@ -207,38 +207,3 @@ public class StudyClient : MonoBehaviour
     }
 }
 
-
-[Serializable]
-public class GameConnectionData
-{
-    public string env_id;
-    public Dictionary<string, PlayerInfo> player_info;
-    public List<List<List<string>>> recipe_graphs;
-    public List<int> kitchen_size;
-}
-
-[Serializable]
-public class PlayerInfo
-{
-    public string client_id;
-    public string player_hash;
-    public string player_id;
-    public string websocket_url;
-}
-
-[Serializable]
-public class WebsocketMessage
-{
-    public string type;
-    public string player_hash;
-    public Action action;
-    public Dictionary<string, string> player_info_update;
-}
-
-[Serializable]
-public class Action
-{
-    public string player;
-    public string type;
-    public object action_data;
-}

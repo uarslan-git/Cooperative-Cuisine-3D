@@ -54,7 +54,7 @@ public class DirectPlayerMovement : MonoBehaviour
         Action action = new Action
         {
             player = playerId,
-            type = "movement",
+            action_type = "movement",
             action_data = new System.Collections.Generic.List<float> { move.x, move.y }
         };
         studyClient.SendAction(action);

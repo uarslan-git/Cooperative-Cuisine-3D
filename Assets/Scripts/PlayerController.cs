@@ -66,8 +66,8 @@ public class PlayerController : MonoBehaviour
             Action action = new Action
             {
                 player = studyClient.myPlayerId,
-                type = "movement",
-                action_data = new System.Collections.Generic.List<float> { move.x, move.y }
+                action_type = "movement",
+                action_data = new List<float> { move.x, move.y }
             };
             studyClient.SendAction(action);
         }
@@ -78,7 +78,7 @@ public class PlayerController : MonoBehaviour
         Action action = new Action
         {
             player = studyClient.myPlayerId,
-            type = "interact",
+            action_type = "interact",
             action_data = (interactionType == "START" ? "keydown" : "keyup")
         };
         studyClient.SendAction(action);
@@ -89,7 +89,7 @@ public class PlayerController : MonoBehaviour
         Action action = new Action
         {
             player = studyClient.myPlayerId,
-            type = "pick_up_drop"
+            action_type = "pick_up_drop"
         };
         studyClient.SendAction(action);
     }
