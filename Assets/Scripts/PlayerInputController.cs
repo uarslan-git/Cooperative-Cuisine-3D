@@ -11,6 +11,8 @@ public class PlayerInputController : MonoBehaviour
     public PlayerInput playerInput;
     public Camera mainCamera;
 
+    private Vector2 _moveInput;
+
     void Awake()
     {
         // Automatically find the StudyClient in the scene when the player is instantiated.
@@ -36,18 +38,19 @@ public class PlayerInputController : MonoBehaviour
         }
     }
 
+    void Update()
+    {
+        if (_moveInput != Vector2.zero)
+        {
+            SendMoveAction(_moveInput);
+        }
+    }
+
     // Called by the PlayerInput component when the "Move" action is triggered
     public void OnMove(InputValue value)
     {
-        Vector2 move = value.Get<Vector2>();
-        move.y = -move.y;
-        Debug.Log("Key Pressed. Move value: " + move);
-
-        // Only send an action if there is movement input
-        if (move != Vector2.zero)
-        {
-            SendMoveAction(move);
-        }
+        _moveInput = value.Get<Vector2>();
+        _moveInput.y = -_moveInput.y;
     }
 
     // Called by the PlayerInput component when the "PickUp" action is triggered
@@ -76,7 +79,7 @@ public class PlayerInputController : MonoBehaviour
             player = studyClient.myPlayerId,
             action_type = "movement",
             action_data = new System.Collections.Generic.List<float> { move.x, move.y },
-            duration = 0.1f,
+            duration = Time.deltaTime,
             player_hash = studyClient.myPlayerHash
         };
         studyClient.SendAction(action);
