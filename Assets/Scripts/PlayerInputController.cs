@@ -76,7 +76,7 @@ public class PlayerInputController : MonoBehaviour
             player = studyClient.myPlayerId,
             action_type = "movement",
             action_data = new System.Collections.Generic.List<float> { move.x, move.y },
-            duration = 1.0f,
+            duration = 0.1f,
             player_hash = studyClient.myPlayerHash
         };
         studyClient.SendAction(action);
