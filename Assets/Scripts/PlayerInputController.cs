@@ -40,6 +40,7 @@ public class PlayerInputController : MonoBehaviour
     public void OnMove(InputValue value)
     {
         Vector2 move = value.Get<Vector2>();
+        move.y = -move.y;
         Debug.Log("Key Pressed. Move value: " + move);
 
         // Only send an action if there is movement input
