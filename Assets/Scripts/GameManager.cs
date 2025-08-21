@@ -4,6 +4,7 @@ using UnityEngine.UI;
 using System.Collections.Generic;
 using System.Linq;
 using TMPro;
+using Newtonsoft.Json;
 
 public class GameManager : MonoBehaviour
 {
@@ -22,6 +23,7 @@ public class GameManager : MonoBehaviour
     private GameObject progressBarPrefab;
 
     private bool floorInstantiated = false;
+    private string lastStateJson = "";
 
     void Start()
     {
@@ -36,6 +38,13 @@ public class GameManager : MonoBehaviour
 
     public void HandleStateReceived(StateRepresentation state)
     {
+        string newStateJson = JsonConvert.SerializeObject(state);
+        if (newStateJson == lastStateJson)
+        {
+            return; // State has not changed, do not update
+        }
+
+        lastStateJson = newStateJson;
         lastState = state;
         UpdateWorld();
     }
@@ -65,36 +74,26 @@ public class GameManager : MonoBehaviour
         UpdateOrders();
 
         HashSet<string> activeItemIds = new HashSet<string>();
-        if (lastState.players != null)
-        {
-            foreach (var p in lastState.players)
-            {
+        if (lastState.players != null) {
+            foreach (var p in lastState.players) {
                 if (p.holding != null) activeItemIds.Add(p.holding.id);
             }
         }
-        if (lastState.counters != null)
-        {
-            foreach (var c in lastState.counters)
-            {
-                if (c.occupied_by != null)
-                {
-                    foreach (var item in c.occupied_by)
-                    {
-                        activeItemIds.Add(item.id);
-                    }
+        if (lastState.counters != null) {
+            foreach (var c in lastState.counters) {
+                if (c.occupied_by != null) {
+                    foreach (var item in c.occupied_by) activeItemIds.Add(item.id);
                 }
             }
         }
 
-        foreach (var itemId in items.Keys.ToList())
-        {
-            if (!activeItemIds.Contains(itemId))
-            {
+        foreach (var itemId in items.Keys.ToList()) {
+            if (!activeItemIds.Contains(itemId)) {
                 Destroy(items[itemId]);
                 items.Remove(itemId);
             }
         }
-        
+
         HashSet<string> activeProgressIds = new HashSet<string>();
 
         if (lastState.players != null)
@@ -111,20 +110,15 @@ public class GameManager : MonoBehaviour
                     if (playerState.id == studyClient.myPlayerId)
                     {
                         PlayerInputController pic = GetComponent<PlayerInputController>();
-                        if (pic != null)
-                        {
-                            pic.controlledPlayerGameObject = playerObj;
-                        }
+                        if (pic != null) pic.controlledPlayerGameObject = playerObj;
                     }
-                    }
+                }
                 else
                 {
                     playerObj = players[playerState.id];
-                    Debug.Log($"Updating player {playerState.id} position from {playerObj.transform.position} to ({playerState.pos[0]}, 0, {invertedPlayerZ})");
                     playerObj.transform.position = new Vector3(playerState.pos[0], 0, invertedPlayerZ);
                 }
 
-                // Update player rotation
                 playerObj.transform.rotation = Quaternion.LookRotation(new Vector3(playerState.facing_direction[0], 0, -playerState.facing_direction[1]));
 
                 if (playerState.holding != null)
@@ -149,7 +143,6 @@ public class GameManager : MonoBehaviour
                     GameObject counterPrefab = Resources.Load<GameObject>($"Prefabs/{counterState.type}");
                     if (counterPrefab == null)
                     {
-                        Debug.LogWarning($"Prefab for counter type '{counterState.type}' not found. Using default cube.");
                         counterPrefab = GameObject.CreatePrimitive(PrimitiveType.Cube);
                         counterPrefab.name = counterState.type;
                     }
@@ -177,7 +170,7 @@ public class GameManager : MonoBehaviour
                 }
             }
         }
-        
+
         foreach (var progressId in progressBars.Keys.ToList())
         {
             if (!activeProgressIds.Contains(progressId))
@@ -196,7 +189,6 @@ public class GameManager : MonoBehaviour
             GameObject itemPrefab = Resources.Load<GameObject>($"Prefabs/{itemState.type}");
             if (itemPrefab == null)
             {
-                Debug.LogWarning($"Prefab for item type '{itemState.type}' not found. Using default sphere.");
                 itemPrefab = GameObject.CreatePrimitive(PrimitiveType.Sphere);
                 itemPrefab.name = itemState.type;
                 itemPrefab.transform.localScale = new Vector3(0.5f, 0.5f, 0.5f);
@@ -227,19 +219,16 @@ public class GameManager : MonoBehaviour
         Slider progressBar;
         if (!progressBars.ContainsKey(id))
         {
-            // Create a world space canvas
             GameObject canvasObj = new GameObject($"ProgressBarCanvas_{id}");
             Canvas canvas = canvasObj.AddComponent<Canvas>();
             canvas.renderMode = RenderMode.WorldSpace;
             canvasObj.AddComponent<CanvasScaler>().dynamicPixelsPerUnit = 10;
-            canvasObj.AddComponent<LookAtCamera>(); // Add the script to make it face the camera
+            canvasObj.AddComponent<LookAtCamera>();
 
-            // Instantiate the progress bar prefab as a child of the canvas
             GameObject progressBarObj = Instantiate(progressBarPrefab, canvasObj.transform);
             progressBar = progressBarObj.GetComponentInChildren<Slider>();
             progressBars.Add(id, progressBar);
 
-            // Configure the canvas rect
             RectTransform canvasRect = canvasObj.GetComponent<RectTransform>();
             canvasRect.sizeDelta = new Vector2(1, 0.3f);
             canvasRect.localScale = new Vector3(0.01f, 0.01f, 0.01f);
@@ -249,26 +238,18 @@ public class GameManager : MonoBehaviour
             progressBar = progressBars[id];
         }
 
-        // Update position every frame
         progressBar.transform.root.position = parent.position + Vector3.up * 1.5f;
-
-        // Update progress value
         progressBar.value = progress / 100f;
-        
-        // Ensure the canvas is active
         progressBar.transform.root.gameObject.SetActive(true);
     }
 
     private void UpdateOrders()
     {
-        // Clear existing orders
         foreach (Transform child in ordersContainer)
         {
-            if(child.gameObject.activeSelf)
-                Destroy(child.gameObject);
+            if(child.gameObject.activeSelf) Destroy(child.gameObject);
         }
 
-        // Create new orders
         if (lastState.orders != null)
         {
             foreach (var order in lastState.orders)
