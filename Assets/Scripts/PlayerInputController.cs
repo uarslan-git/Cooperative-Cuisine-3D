@@ -53,21 +53,14 @@ public class PlayerInputController : MonoBehaviour
         _moveInput.y = -_moveInput.y;
     }
 
-    // Called by the PlayerInput component when the "PickUp" action is triggered
-    public void OnPickUp(InputValue value)
-    {
-        if (value.isPressed)
-        {
-            SendButtonAction("pickup");
-        }
-    }
-
     // Called by the PlayerInput component when the "Interact" action is triggered
     public void OnInteract(InputValue value)
     {
+        Debug.Log("OnInteract called");
         if (value.isPressed)
         {
-            SendButtonAction("interact");
+            Debug.Log("Interact action is pressed");
+            SendButtonAction("pick_up_drop");
         }
     }
 

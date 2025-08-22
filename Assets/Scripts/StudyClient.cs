@@ -130,7 +130,7 @@ public class StudyClient : MonoBehaviour
         websocket.OnMessage += (bytes) =>
         {
             var message = Encoding.UTF8.GetString(bytes);
-            Debug.Log($"Received State Message: {message}");
+            // Debug.Log($"Received State Message: {message}");
             // The server sends the raw state, not a wrapped message object.
             try
             {
