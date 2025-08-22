@@ -1,13 +1,11 @@
 using UnityEngine;
-using System.Collections;
-using System.Text;
-using Newtonsoft.Json;
-using System.Collections.Generic;
 
 public class DirectPlayerMovement : MonoBehaviour
 {
     public StudyClient studyClient;
     public string playerId;
+    public float moveCooldown = 0.1f; // 100ms cooldown
+    private float lastMoveTime = 0f;
 
     void Awake()
     {
@@ -23,6 +21,11 @@ public class DirectPlayerMovement : MonoBehaviour
 
     void Update()
     {
+        if (Time.time - lastMoveTime < moveCooldown)
+        {
+            return;
+        }
+
         Vector2 move = Vector2.zero;
 
         if (Input.GetKey(KeyCode.W))
@@ -45,6 +48,7 @@ public class DirectPlayerMovement : MonoBehaviour
         if (move != Vector2.zero)
         {
             SendMoveAction(move);
+            lastMoveTime = Time.time;
         }
     }
 

@@ -63,13 +63,13 @@ public class GameManager : MonoBehaviour
             foreach (var playerState in lastState.players) {
                 GameObject playerObj = UpdatePlayer(playerState);
                 if (playerState.holding != null) {
-                    string slotId = $"player-{playerState.id}-holding";
-                    activeSlotIDs.Add(slotId);
-                    UpdateItem(slotId, playerState.holding, playerObj.transform.Find("HoldingSpot"));
+                    string itemId = playerState.holding.id;
+                    activeSlotIDs.Add(itemId);
+                    UpdateItem(itemId, playerState.holding, playerObj.transform.Find("HoldingSpot"));
 
                     if (playerState.holding.progress_percentage > 0) {
-                        activeProgressIDs.Add(slotId);
-                        UpdateProgressBar(slotId, itemObjects[slotId].transform, playerState.holding.progress_percentage);
+                        activeProgressIDs.Add(itemId);
+                        UpdateProgressBar(itemId, itemObjects[itemId].transform, playerState.holding.progress_percentage);
                     }
                 }
             }
@@ -82,13 +82,13 @@ public class GameManager : MonoBehaviour
                 if (counterState.occupied_by != null) {
                     for (int i = 0; i < counterState.occupied_by.Count; i++) {
                         ItemState itemState = counterState.occupied_by[i];
-                        string slotId = $"counter-{counterState.id}-slot-{i}";
-                        activeSlotIDs.Add(slotId);
-                        UpdateItem(slotId, itemState, counterObj.transform);
+                        string itemId = itemState.id;
+                        activeSlotIDs.Add(itemId);
+                        UpdateItem(itemId, itemState, counterObj.transform);
 
                         if (itemState.progress_percentage > 0) {
-                            activeProgressIDs.Add(slotId);
-                            UpdateProgressBar(slotId, itemObjects[slotId].transform, itemState.progress_percentage);
+                            activeProgressIDs.Add(itemId);
+                            UpdateProgressBar(itemId, itemObjects[itemId].transform, itemState.progress_percentage);
                         }
                     }
                 }
@@ -96,10 +96,10 @@ public class GameManager : MonoBehaviour
         }
 
         // Clean up any items in slots that are no longer active
-        foreach (var slotId in itemObjects.Keys.ToList()) {
-            if (!activeSlotIDs.Contains(slotId)) {
-                Destroy(itemObjects[slotId]);
-                itemObjects.Remove(slotId);
+        foreach (var itemId in itemObjects.Keys.ToList()) {
+            if (!activeSlotIDs.Contains(itemId)) {
+                Destroy(itemObjects[itemId]);
+                itemObjects.Remove(itemId);
             }
         }
 
@@ -112,33 +112,38 @@ public class GameManager : MonoBehaviour
         }
     }
 
-    private void UpdateItem(string slotId, ItemState itemState, Transform parent)
+    private void UpdateItem(string itemId, ItemState itemState, Transform parent)
     {
         GameObject itemObj = null;
         bool needsNewPrefab = false;
 
-        if (!itemObjects.ContainsKey(slotId)) {
+        if (!itemObjects.ContainsKey(itemId)) {
             needsNewPrefab = true;
         } else {
-            itemObj = itemObjects[slotId];
+            itemObj = itemObjects[itemId];
             string expectedName = $"Item_{itemState.type}";
             if (!itemObj.name.StartsWith(expectedName)) {
                 Destroy(itemObj);
-                itemObjects.Remove(slotId);
+                itemObjects.Remove(itemId);
                 needsNewPrefab = true;
             }
         }
 
         if (needsNewPrefab) {
             GameObject itemPrefab = Resources.Load<GameObject>($"Prefabs/{itemState.type}");
+            GameObject toDestroy = null;
             if (itemPrefab == null) {
                 itemPrefab = GameObject.CreatePrimitive(PrimitiveType.Sphere);
                 itemPrefab.name = $"Item_{itemState.type}_Default";
                 itemPrefab.transform.localScale = new Vector3(0.5f, 0.5f, 0.5f);
+                toDestroy = itemPrefab;
             }
             itemObj = Instantiate(itemPrefab);
+            if (toDestroy != null) {
+                Destroy(toDestroy);
+            }
             itemObj.name = $"Item_{itemState.type}_{itemState.id}";
-            itemObjects[slotId] = itemObj;
+            itemObjects[itemId] = itemObj;
         }
 
         itemObj.transform.SetParent(parent, false);
