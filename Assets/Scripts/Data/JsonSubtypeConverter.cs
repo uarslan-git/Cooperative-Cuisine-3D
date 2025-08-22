@@ -4,6 +4,8 @@ using Newtonsoft.Json.Linq;
 
 public class JsonSubtypeConverter<T> : JsonConverter
 {
+    public override bool CanWrite => false;
+
     public override bool CanConvert(Type objectType)
     {
         return (objectType == typeof(T));

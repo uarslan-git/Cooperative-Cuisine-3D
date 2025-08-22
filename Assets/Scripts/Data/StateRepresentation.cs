@@ -64,7 +64,9 @@ public class ItemState
 [Serializable]
 public class CookingEquipmentState : ItemState
 {
+    [JsonConverter(typeof(SingleOrArrayOfSubtypeConverter<ItemState>))]
     public List<ItemState> content_list;
+    [JsonConverter(typeof(JsonSubtypeConverter<ItemState>))]
     public ItemState content_ready;
 }
 
