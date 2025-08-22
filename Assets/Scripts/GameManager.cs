@@ -1,5 +1,4 @@
 using UnityEngine;
-using UnityEngine.InputSystem;
 using UnityEngine.UI;
 using System.Collections.Generic;
 using System.Linq;
@@ -14,7 +13,8 @@ public class GameManager : MonoBehaviour
     public Transform ordersContainer;
     public GameObject orderTextPrefab;
 
-    public Dictionary<string, GameObject> items = new Dictionary<string, GameObject>();
+    // The key is a stable "slot ID" (e.g., "counter-X-slot-0" or "player-Y-holding")
+    public Dictionary<string, GameObject> itemObjects = new Dictionary<string, GameObject>();
     public Dictionary<string, GameObject> counters = new Dictionary<string, GameObject>();
     public StateRepresentation lastState;
 
@@ -29,20 +29,14 @@ public class GameManager : MonoBehaviour
     {
         studyClient.OnStateReceived += HandleStateReceived;
         progressBarPrefab = Resources.Load<GameObject>("Prefabs/ProgressBar");
-        if (progressBarPrefab == null)
-        {
-            Debug.LogError("ProgressBar prefab not found in Resources/Prefabs!");
-        }
+        if (progressBarPrefab == null) Debug.LogError("ProgressBar prefab not found in Resources/Prefabs!");
         orderTextPrefab.SetActive(false);
     }
 
     public void HandleStateReceived(StateRepresentation state)
     {
         string newStateJson = JsonConvert.SerializeObject(state);
-        if (newStateJson == lastStateJson)
-        {
-            return; // State has not changed, do not update
-        }
+        if (newStateJson == lastStateJson) return; // State has not changed, do not update
 
         lastStateJson = newStateJson;
         lastState = state;
@@ -53,172 +47,150 @@ public class GameManager : MonoBehaviour
     {
         if (lastState == null) return;
 
-        if (!floorInstantiated && lastState.kitchen != null)
-        {
-            GameObject floorPrefab = Resources.Load<GameObject>("Prefabs/Floor");
-            if (floorPrefab != null)
-            {
-                float centerX = (lastState.kitchen.width - 1) / 2.0f;
-                float centerZ = (lastState.kitchen.height - 1) / 2.0f;
-                Instantiate(floorPrefab, new Vector3(centerX, 0, centerZ), Quaternion.identity);
-                floorInstantiated = true;
-            }
-            else
-            {
-                Debug.LogError("Floor prefab not found in Resources/Prefabs!");
-            }
-        }
-
+        // Initial scene setup
+        if (!floorInstantiated && lastState.kitchen != null) InstantiateFloor();
         scoreText.text = $"Score: {lastState.score}";
         timeText.text = $"Time: {Mathf.FloorToInt(lastState.remaining_time)}";
         UpdateOrders();
 
-        HashSet<string> activeItemIds = new HashSet<string>();
+        // --- New, Robust State Reconciliation --- 
+
+        HashSet<string> activeSlotIDs = new HashSet<string>();
+        HashSet<string> activeProgressIDs = new HashSet<string>();
+
+        // Process Players and their held items
         if (lastState.players != null) {
-            foreach (var p in lastState.players) {
-                if (p.holding != null) activeItemIds.Add(p.holding.id);
+            foreach (var playerState in lastState.players) {
+                GameObject playerObj = UpdatePlayer(playerState);
+                if (playerState.holding != null) {
+                    string slotId = $"player-{playerState.id}-holding";
+                    activeSlotIDs.Add(slotId);
+                    UpdateItem(slotId, playerState.holding, playerObj.transform.Find("HoldingSpot"));
+
+                    if (playerState.holding.progress_percentage > 0) {
+                        activeProgressIDs.Add(slotId);
+                        UpdateProgressBar(slotId, itemObjects[slotId].transform, playerState.holding.progress_percentage);
+                    }
+                }
             }
         }
+
+        // Process Counters and their items
         if (lastState.counters != null) {
-            foreach (var c in lastState.counters) {
-                if (c.occupied_by != null) {
-                    foreach (var item in c.occupied_by) activeItemIds.Add(item.id);
-                }
-            }
-        }
+            foreach (var counterState in lastState.counters) {
+                GameObject counterObj = UpdateCounter(counterState);
+                if (counterState.occupied_by != null) {
+                    for (int i = 0; i < counterState.occupied_by.Count; i++) {
+                        ItemState itemState = counterState.occupied_by[i];
+                        string slotId = $"counter-{counterState.id}-slot-{i}";
+                        activeSlotIDs.Add(slotId);
+                        UpdateItem(slotId, itemState, counterObj.transform);
 
-        foreach (var itemId in items.Keys.ToList()) {
-            if (!activeItemIds.Contains(itemId)) {
-                Destroy(items[itemId]);
-                items.Remove(itemId);
-            }
-        }
-
-        HashSet<string> activeProgressIds = new HashSet<string>();
-
-        if (lastState.players != null)
-        {
-            foreach (var playerState in lastState.players)
-            {
-                GameObject playerObj;
-                float invertedPlayerZ = (lastState.kitchen.height - 1) - playerState.pos[1];
-                if (!players.ContainsKey(playerState.id))
-                {
-                    GameObject playerPrefab = Resources.Load<GameObject>("Prefabs/Player");
-                    playerObj = Instantiate(playerPrefab, new Vector3(playerState.pos[0], 0, invertedPlayerZ), Quaternion.identity);
-                    players.Add(playerState.id, playerObj);
-                    if (playerState.id == studyClient.myPlayerId)
-                    {
-                        PlayerInputController pic = GetComponent<PlayerInputController>();
-                        if (pic != null) pic.controlledPlayerGameObject = playerObj;
-                    }
-                }
-                else
-                {
-                    playerObj = players[playerState.id];
-                    playerObj.transform.position = new Vector3(playerState.pos[0], 0, invertedPlayerZ);
-                }
-
-                playerObj.transform.rotation = Quaternion.LookRotation(new Vector3(playerState.facing_direction[0], 0, -playerState.facing_direction[1]));
-
-                if (playerState.holding != null)
-                {
-                    UpdateItem(playerState.holding, playerObj.transform.Find("HoldingSpot"));
-                    if (playerState.holding.progress_percentage > 0)
-                    {
-                        activeProgressIds.Add(playerState.holding.id);
-                        UpdateProgressBar(playerState.holding.id, items[playerState.holding.id].transform, playerState.holding.progress_percentage);
-                    }
-                }
-            }
-        }
-
-        if (lastState.counters != null)
-        {
-            foreach (var counterState in lastState.counters)
-            {
-                GameObject counterObj;
-                if (!counters.ContainsKey(counterState.id))
-                {
-                    GameObject counterPrefab = Resources.Load<GameObject>($"Prefabs/{counterState.type}");
-                    if (counterPrefab == null)
-                    {
-                        counterPrefab = GameObject.CreatePrimitive(PrimitiveType.Cube);
-                        counterPrefab.name = counterState.type;
-                    }
-                    float invertedCounterZ = (lastState.kitchen.height - 1) - counterState.pos[1];
-                    Quaternion counterRotation = Quaternion.LookRotation(new Vector3(counterState.orientation[0], 0, -counterState.orientation[1]));
-                    counterObj = Instantiate(counterPrefab, new Vector3(counterState.pos[0], 0, invertedCounterZ), counterRotation);
-                    counters.Add(counterState.id, counterObj);
-                }
-                else
-                {
-                    counterObj = counters[counterState.id];
-                }
-
-                if (counterState.occupied_by != null)
-                {
-                    foreach (var itemState in counterState.occupied_by)
-                    {
-                        UpdateItem(itemState, counterObj.transform);
-                        if (itemState.progress_percentage > 0)
-                        {
-                            activeProgressIds.Add(itemState.id);
-                            UpdateProgressBar(itemState.id, items[itemState.id].transform, itemState.progress_percentage);
+                        if (itemState.progress_percentage > 0) {
+                            activeProgressIDs.Add(slotId);
+                            UpdateProgressBar(slotId, itemObjects[slotId].transform, itemState.progress_percentage);
                         }
                     }
                 }
             }
         }
 
-        foreach (var progressId in progressBars.Keys.ToList())
-        {
-            if (!activeProgressIds.Contains(progressId))
-            {
-                Destroy(progressBars[progressId].gameObject);
+        // Clean up any items in slots that are no longer active
+        foreach (var slotId in itemObjects.Keys.ToList()) {
+            if (!activeSlotIDs.Contains(slotId)) {
+                Destroy(itemObjects[slotId]);
+                itemObjects.Remove(slotId);
+            }
+        }
+
+        // Clean up progress bars for items no longer progressing
+        foreach (var progressId in progressBars.Keys.ToList()) {
+            if (!activeProgressIDs.Contains(progressId)) {
+                Destroy(progressBars[progressId].transform.root.gameObject);
                 progressBars.Remove(progressId);
             }
         }
     }
 
-    private void UpdateItem(ItemState itemState, Transform parent)
+    private void UpdateItem(string slotId, ItemState itemState, Transform parent)
     {
-        GameObject itemObj;
-        if (!items.ContainsKey(itemState.id))
-        {
+        GameObject itemObj = null;
+        bool needsNewPrefab = false;
+
+        if (!itemObjects.ContainsKey(slotId)) {
+            needsNewPrefab = true;
+        } else {
+            itemObj = itemObjects[slotId];
+            string expectedName = $"Item_{itemState.type}";
+            if (!itemObj.name.StartsWith(expectedName)) {
+                Destroy(itemObj);
+                itemObjects.Remove(slotId);
+                needsNewPrefab = true;
+            }
+        }
+
+        if (needsNewPrefab) {
             GameObject itemPrefab = Resources.Load<GameObject>($"Prefabs/{itemState.type}");
-            if (itemPrefab == null)
-            {
+            if (itemPrefab == null) {
                 itemPrefab = GameObject.CreatePrimitive(PrimitiveType.Sphere);
-                itemPrefab.name = itemState.type;
+                itemPrefab.name = $"Item_{itemState.type}_Default";
                 itemPrefab.transform.localScale = new Vector3(0.5f, 0.5f, 0.5f);
             }
             itemObj = Instantiate(itemPrefab);
-            items.Add(itemState.id, itemObj);
-        }
-        else
-        {
-            itemObj = items[itemState.id];
+            itemObj.name = $"Item_{itemState.type}_{itemState.id}";
+            itemObjects[slotId] = itemObj;
         }
 
-        itemObj.transform.SetParent(parent);
+        itemObj.transform.SetParent(parent, false);
         itemObj.transform.localRotation = Quaternion.identity;
-
-        if (parent.name == "HoldingSpot")
-        {
-            itemObj.transform.localPosition = Vector3.zero;
-        }
-        else
-        {
-            itemObj.transform.localPosition = new Vector3(0, 1f, 0);
-        }
+        itemObj.transform.localPosition = (parent.name == "HoldingSpot") ? Vector3.zero : new Vector3(0, 1f, 0);
     }
 
-    private void UpdateProgressBar(string id, Transform parent, float progress)
-    {
+    private GameObject UpdatePlayer(PlayerState playerState) {
+        GameObject playerObj;
+        float invertedPlayerZ = (lastState.kitchen.height - 1) - playerState.pos[1];
+        Vector3 position = new Vector3(playerState.pos[0], 0, invertedPlayerZ);
+        Quaternion rotation = Quaternion.LookRotation(new Vector3(playerState.facing_direction[0], 0, -playerState.facing_direction[1]));
+
+        if (!players.ContainsKey(playerState.id)) {
+            GameObject playerPrefab = Resources.Load<GameObject>("Prefabs/Player");
+            playerObj = Instantiate(playerPrefab, position, rotation);
+            players.Add(playerState.id, playerObj);
+            if (playerState.id == studyClient.myPlayerId) {
+                PlayerInputController pic = GetComponent<PlayerInputController>();
+                if (pic != null) pic.controlledPlayerGameObject = playerObj;
+            }
+        } else {
+            playerObj = players[playerState.id];
+            playerObj.transform.position = position;
+            playerObj.transform.rotation = rotation;
+        }
+        return playerObj;
+    }
+
+    private GameObject UpdateCounter(CounterState counterState) {
+        GameObject counterObj;
+        float invertedCounterZ = (lastState.kitchen.height - 1) - counterState.pos[1];
+        Vector3 position = new Vector3(counterState.pos[0], 0, invertedCounterZ);
+        Quaternion rotation = Quaternion.LookRotation(new Vector3(counterState.orientation[0], 0, -counterState.orientation[1]));
+
+        if (!counters.ContainsKey(counterState.id)) {
+            GameObject counterPrefab = Resources.Load<GameObject>($"Prefabs/{counterState.type}");
+            if (counterPrefab == null) {
+                counterPrefab = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                counterPrefab.name = counterState.type;
+            }
+            counterObj = Instantiate(counterPrefab, position, rotation);
+            counters.Add(counterState.id, counterObj);
+        } else {
+            counterObj = counters[counterState.id];
+        }
+        return counterObj;
+    }
+
+    private void UpdateProgressBar(string id, Transform parent, float progress) {
         Slider progressBar;
-        if (!progressBars.ContainsKey(id))
-        {
+        if (!progressBars.ContainsKey(id)) {
             GameObject canvasObj = new GameObject($"ProgressBarCanvas_{id}");
             Canvas canvas = canvasObj.AddComponent<Canvas>();
             canvas.renderMode = RenderMode.WorldSpace;
@@ -232,32 +204,36 @@ public class GameManager : MonoBehaviour
             RectTransform canvasRect = canvasObj.GetComponent<RectTransform>();
             canvasRect.sizeDelta = new Vector2(1, 0.3f);
             canvasRect.localScale = new Vector3(0.01f, 0.01f, 0.01f);
-        }
-        else
-        {
+        } else {
             progressBar = progressBars[id];
         }
-
         progressBar.transform.root.position = parent.position + Vector3.up * 1.5f;
         progressBar.value = progress / 100f;
         progressBar.transform.root.gameObject.SetActive(true);
     }
 
-    private void UpdateOrders()
-    {
-        foreach (Transform child in ordersContainer)
-        {
+    private void UpdateOrders() {
+        foreach (Transform child in ordersContainer) {
             if(child.gameObject.activeSelf) Destroy(child.gameObject);
         }
-
-        if (lastState.orders != null)
-        {
-            foreach (var order in lastState.orders)
-            {
+        if (lastState.orders != null) {
+            foreach (var order in lastState.orders) {
                 GameObject orderObj = Instantiate(orderTextPrefab, ordersContainer);
                 orderObj.GetComponent<TextMeshProUGUI>().text = order.meal;
                 orderObj.SetActive(true);
             }
+        }
+    }
+
+    private void InstantiateFloor() {
+        GameObject floorPrefab = Resources.Load<GameObject>("Prefabs/Floor");
+        if (floorPrefab != null) {
+            float centerX = (lastState.kitchen.width - 1) / 2.0f;
+            float centerZ = (lastState.kitchen.height - 1) / 2.0f;
+            Instantiate(floorPrefab, new Vector3(centerX, 0, centerZ), Quaternion.identity);
+            floorInstantiated = true;
+        } else {
+            Debug.LogError("Floor prefab not found in Resources/Prefabs!");
         }
     }
 }
