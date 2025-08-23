@@ -1,3 +1,4 @@
+
 using UnityEngine;
 using UnityEngine.UI;
 using System.Collections.Generic;
@@ -13,7 +14,6 @@ public class GameManager : MonoBehaviour
     public Transform ordersContainer;
     public GameObject orderTextPrefab;
 
-    // The key is a stable "slot ID" (e.g., "counter-X-slot-0" or "player-Y-holding")
     public Dictionary<string, GameObject> itemObjects = new Dictionary<string, GameObject>();
     public Dictionary<string, GameObject> counters = new Dictionary<string, GameObject>();
     public StateRepresentation lastState;
@@ -23,7 +23,6 @@ public class GameManager : MonoBehaviour
     private GameObject progressBarPrefab;
 
     private bool floorInstantiated = false;
-    private string lastStateJson = "";
 
     void Start()
     {
@@ -33,77 +32,63 @@ public class GameManager : MonoBehaviour
         orderTextPrefab.SetActive(false);
     }
 
-    public void HandleStateReceived(StateRepresentation state)
+    public void HandleStateReceived(StateRepresentation newState)
     {
-        string newStateJson = JsonConvert.SerializeObject(state);
-        if (newStateJson == lastStateJson) return; // State has not changed, do not update
-
-        lastStateJson = newStateJson;
-        lastState = state;
-        UpdateWorld();
+        if (lastState == null || !newState.Equals(lastState))
+        {
+            lastState = newState;
+            UpdateWorld();
+        }
     }
 
     void UpdateWorld()
     {
         if (lastState == null) return;
 
-        // Initial scene setup
         if (!floorInstantiated && lastState.kitchen != null) InstantiateFloor();
         scoreText.text = $"Score: {lastState.score}";
         timeText.text = $"Time: {Mathf.FloorToInt(lastState.remaining_time)}";
         UpdateOrders();
 
-        // --- New, Robust State Reconciliation --- 
-
-        HashSet<string> activeSlotIDs = new HashSet<string>();
+        HashSet<string> activeItemIDs = new HashSet<string>();
         HashSet<string> activeProgressIDs = new HashSet<string>();
 
-        // Process Players and their held items
         if (lastState.players != null) {
             foreach (var playerState in lastState.players) {
                 GameObject playerObj = UpdatePlayer(playerState);
                 if (playerState.holding != null) {
-                    string itemId = playerState.holding.id;
-                    activeSlotIDs.Add(itemId);
-                    UpdateItem(itemId, playerState.holding, playerObj.transform.Find("HoldingSpot"));
-
+                    activeItemIDs.Add(playerState.holding.id);
+                    UpdateItem(playerState.holding, playerObj.transform.Find("HoldingSpot"));
                     if (playerState.holding.progress_percentage > 0) {
-                        activeProgressIDs.Add(itemId);
-                        UpdateProgressBar(itemId, itemObjects[itemId].transform, playerState.holding.progress_percentage);
+                        activeProgressIDs.Add(playerState.holding.id);
+                        UpdateProgressBar(playerState.holding.id, itemObjects[playerState.holding.id].transform, playerState.holding.progress_percentage);
                     }
                 }
             }
         }
 
-        // Process Counters and their items
         if (lastState.counters != null) {
             foreach (var counterState in lastState.counters) {
                 GameObject counterObj = UpdateCounter(counterState);
                 if (counterState.occupied_by != null) {
-                    for (int i = 0; i < counterState.occupied_by.Count; i++) {
-                        ItemState itemState = counterState.occupied_by[i];
-                        string itemId = itemState.id;
-                        activeSlotIDs.Add(itemId);
-                        UpdateItem(itemId, itemState, counterObj.transform);
-
+                    foreach (ItemState itemState in counterState.occupied_by) {
+                        activeItemIDs.Add(itemState.id);
+                        UpdateItem(itemState, counterObj.transform);
                         if (itemState.progress_percentage > 0) {
-                            activeProgressIDs.Add(itemId);
-                            UpdateProgressBar(itemId, itemObjects[itemId].transform, itemState.progress_percentage);
+                            activeProgressIDs.Add(itemState.id);
+                            UpdateProgressBar(itemState.id, itemObjects[itemState.id].transform, itemState.progress_percentage);
                         }
                     }
                 }
             }
         }
 
-        // Clean up any items in slots that are no longer active
-        foreach (var itemId in itemObjects.Keys.ToList()) {
-            if (!activeSlotIDs.Contains(itemId)) {
-                Destroy(itemObjects[itemId]);
-                itemObjects.Remove(itemId);
+        foreach (var itemID in itemObjects.Keys.ToList()) {
+            if (!activeItemIDs.Contains(itemID)) {
+                itemObjects[itemID].SetActive(false);
             }
         }
 
-        // Clean up progress bars for items no longer progressing
         foreach (var progressId in progressBars.Keys.ToList()) {
             if (!activeProgressIDs.Contains(progressId)) {
                 Destroy(progressBars[progressId].transform.root.gameObject);
@@ -112,43 +97,30 @@ public class GameManager : MonoBehaviour
         }
     }
 
-    private void UpdateItem(string itemId, ItemState itemState, Transform parent)
+    private void UpdateItem(ItemState itemState, Transform parent)
     {
-        GameObject itemObj = null;
-        bool needsNewPrefab = false;
-
-        if (!itemObjects.ContainsKey(itemId)) {
-            needsNewPrefab = true;
+        GameObject itemObj;
+        if (itemObjects.ContainsKey(itemState.id)) {
+            itemObj = itemObjects[itemState.id];
+            itemObj.SetActive(true);
         } else {
-            itemObj = itemObjects[itemId];
-            string expectedName = $"Item_{itemState.type}";
-            if (!itemObj.name.StartsWith(expectedName)) {
-                Destroy(itemObj);
-                itemObjects.Remove(itemId);
-                needsNewPrefab = true;
-            }
-        }
-
-        if (needsNewPrefab) {
             GameObject itemPrefab = Resources.Load<GameObject>($"Prefabs/{itemState.type}");
-            GameObject toDestroy = null;
             if (itemPrefab == null) {
                 itemPrefab = GameObject.CreatePrimitive(PrimitiveType.Sphere);
                 itemPrefab.name = $"Item_{itemState.type}_Default";
                 itemPrefab.transform.localScale = new Vector3(0.5f, 0.5f, 0.5f);
-                toDestroy = itemPrefab;
             }
             itemObj = Instantiate(itemPrefab);
-            if (toDestroy != null) {
-                Destroy(toDestroy);
-            }
             itemObj.name = $"Item_{itemState.type}_{itemState.id}";
-            itemObjects[itemId] = itemObj;
+            itemObjects[itemState.id] = itemObj;
         }
 
-        itemObj.transform.SetParent(parent, false);
-        itemObj.transform.localRotation = Quaternion.identity;
-        itemObj.transform.localPosition = (parent.name == "HoldingSpot") ? Vector3.zero : new Vector3(0, 1f, 0);
+        if (itemObj.transform.parent != parent)
+        {
+            itemObj.transform.SetParent(parent, false);
+            itemObj.transform.localRotation = Quaternion.identity;
+            itemObj.transform.localPosition = (parent.name == "HoldingSpot") ? Vector3.zero : new Vector3(0, 1f, 0);
+        }
     }
 
     private GameObject UpdatePlayer(PlayerState playerState) {
