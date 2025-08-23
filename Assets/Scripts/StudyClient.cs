@@ -130,19 +130,23 @@ public class StudyClient : MonoBehaviour
         websocket.OnMessage += (bytes) =>
         {
             var message = Encoding.UTF8.GetString(bytes);
-            // Debug.Log($"Received State Message: {message}");
-            // The server sends the raw state, not a wrapped message object.
             try
             {
+                // Try to parse it as a state representation first
                 var state = JsonConvert.DeserializeObject<StateRepresentation>(message);
-                if (state != null)
+                if (state != null && state.players != null)
                 {
                     OnStateReceived?.Invoke(state);
+                }
+                else
+                {
+                    // Handle other message types if necessary
+                    Debug.Log($"Received non-state message: {message}");
                 }
             }
             catch (Exception e)
             {
-                Debug.LogError($"Failed to deserialize state message: {e.Message}\nMessage content: {message}");
+                Debug.LogError($"Failed to deserialize message: {e.Message}\nMessage content: {message}");
             }
         };
 
@@ -207,3 +211,86 @@ public class StudyClient : MonoBehaviour
     }
 }
 
+
+
+[Serializable]
+public class GameConnectionData
+{
+    public Dictionary<string, PlayerInfo> player_info;
+    public string study_id;
+    public int num_players;
+}
+
+[Serializable]
+public class PlayerInfo
+{
+    public string player_id;
+    public string player_hash;
+    public string websocket_url;
+}
+
+[Serializable]
+public class WebsocketMessage
+{
+    public string type;
+    public string player_hash;
+    public Action action;
+}
+
+[Serializable]
+public class Action
+{
+    public string player;
+    public string action_type;
+    public List<float> action_data;
+    public float duration;
+    public string player_hash;
+}
+
+[Serializable]
+public class StateRepresentation
+{
+    public List<PlayerState> players;
+    [JsonProperty("counters")]
+    public List<ItemState> items;
+    public List<OrderState> orders;
+    public int score;
+    [JsonProperty("remaining_time")]
+    public float time_remaining;
+}
+
+[Serializable]
+public class PlayerState
+{
+    [JsonProperty("id")]
+    public string player_id;
+    [JsonProperty("pos")]
+    public List<float> position;
+    [JsonProperty("facing_direction")]
+    public List<float> rotation;
+    [JsonProperty("holding")]
+    public ItemState held_item;
+}
+
+[Serializable]
+public class ItemState
+{
+    [JsonProperty("id")]
+    public string item_id;
+    public string name;
+    public List<float> position;
+    public List<string> ingredients;
+    public string state;
+}
+
+[Serializable]
+public class OrderState
+{
+    [JsonProperty("id")]
+    public string order_id;
+    [JsonProperty("meal")]
+    public string name;
+    public List<string> ingredients;
+    [JsonProperty("max_duration")]
+    public float time_remaining;
+}

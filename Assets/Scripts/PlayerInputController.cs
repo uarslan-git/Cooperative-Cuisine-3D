@@ -25,16 +25,18 @@ public class PlayerInputController : MonoBehaviour
             Debug.LogError("PlayerInputController could not find a StudyClient in the scene!");
         }
 
+        if (playerInput == null)
+        {
+            playerInput = GetComponent<PlayerInput>();
+        }
+
         if (playerInput != null)
         {
-            playerInput.actions = playerInput.actions; // Ensure actions are loaded
-            playerInput.notificationBehavior = PlayerNotifications.InvokeUnityEvents;
-            playerInput.camera = mainCamera;
             playerInput.actions.FindActionMap("Player").Enable();
         }
         else
         {
-            Debug.LogError("PlayerInput component not assigned to PlayerInputController!");
+            Debug.LogError("PlayerInput component not found on the same GameObject as PlayerInputController!");
         }
     }
 
