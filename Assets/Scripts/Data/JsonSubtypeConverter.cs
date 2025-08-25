@@ -14,13 +14,23 @@ public class JsonSubtypeConverter<T> : JsonConverter
     public override object ReadJson(JsonReader reader, Type objectType, object existingValue, JsonSerializer serializer)
     {
         JToken token = JToken.Load(reader);
-        if (token == null || token.Type == JTokenType.Null)
+        if (token == null || token.Type == JTokenType.Null || token.Type == JTokenType.String && token.ToString() == "null")
+        {
+            return null;
+        }
+
+        if (token.Type != JTokenType.Object)
         {
             return null;
         }
 
         JObject item = (JObject)token;
-        string type = item["category"].Value<string>();
+        if (!item.TryGetValue("category", StringComparison.OrdinalIgnoreCase, out JToken typeToken))
+        {
+            return null;
+        }
+
+        string type = typeToken.Value<string>();
 
         switch (type)
         {

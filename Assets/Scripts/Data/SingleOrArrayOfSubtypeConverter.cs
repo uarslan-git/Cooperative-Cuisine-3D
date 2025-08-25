@@ -19,30 +19,39 @@ public class SingleOrArrayOfSubtypeConverter<T> : JsonConverter where T : class
     {
         JToken token = JToken.Load(reader);
 
-        // Handle null tokens
         if (token == null || token.Type == JTokenType.Null)
         {
             return null;
         }
 
-        // Handle the case where the token is an array
         if (token.Type == JTokenType.Array)
         {
             var list = new List<T>();
             foreach (var itemToken in token.Children<JObject>())
             {
-                list.Add(ReadItem(itemToken, serializer));
+                var item = ReadItem(itemToken, serializer);
+                if (item != null)
+                {
+                    list.Add(item);
+                }
             }
             return list;
         }
 
-        // Handle the case where the token is a single object
         if (token.Type == JTokenType.Object)
         {
-            return new List<T> { ReadItem((JObject)token, serializer) };
+            var item = ReadItem((JObject)token, serializer);
+            if (item != null)
+            {
+                return new List<T> { item };
+            }
+            else
+            {
+                return new List<T>();
+            }
         }
 
-        return null; // Should not happen with valid JSON
+        return null;
     }
 
     private T ReadItem(JObject item, JsonSerializer serializer)

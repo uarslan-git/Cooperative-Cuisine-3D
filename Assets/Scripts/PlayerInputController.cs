@@ -73,7 +73,7 @@ public class PlayerInputController : MonoBehaviour
         {
             player = studyClient.myPlayerId,
             action_type = "movement",
-            action_data = new System.Collections.Generic.List<float> { move.x, move.y },
+            action_data = new System.Collections.Generic.List<float> { move.x * 1.2f, move.y * 1.2f },
             duration = Time.deltaTime,
             player_hash = studyClient.myPlayerHash
         };
@@ -94,5 +94,33 @@ public class PlayerInputController : MonoBehaviour
         };
         studyClient.SendAction(action);
         Debug.Log("Sent Button Action: " + actionType);
+    }
+
+    // Called by the PlayerInput component for the new "InteractHold" action
+    public void OnInteractHold(InputValue value)
+    {
+        if (value.isPressed)
+        {
+            SendInteractAction("keydown");
+        }
+        else
+        {
+            SendInteractAction("keyup");
+        }
+    }
+
+    private void SendInteractAction(string actionData)
+    {
+        if (studyClient == null) return;
+        Action action = new Action
+        {
+            player = studyClient.myPlayerId,
+            action_type = "interact",
+            action_data = actionData,
+            duration = 0.0f,
+            player_hash = studyClient.myPlayerHash
+        };
+        studyClient.SendAction(action);
+        Debug.Log("Sent Interact Action: " + actionData);
     }
 }
