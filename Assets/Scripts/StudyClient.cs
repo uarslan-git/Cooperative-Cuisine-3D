@@ -6,6 +6,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Text;
 using NativeWebSocket;
+using System.Linq;
 
 using System.Collections.Concurrent;
 
@@ -20,8 +21,10 @@ public class StudyClient : MonoBehaviour
 
     public Action<StateRepresentation> OnStateReceived;
     private GameConnectionData gameConnectionData;
+    private LevelInfo levelInfo;
     private WebSocket websocket;
     private readonly ConcurrentQueue<System.Action> mainThreadActions = new ConcurrentQueue<System.Action>();
+    private bool isStateUpdateLoopRunning = false;
 
     public GameManager gameManager;
     public GameObject nextLevelCanvas;
@@ -68,6 +71,12 @@ public class StudyClient : MonoBehaviour
 #if !UNITY_WEBGL || UNITY_EDITOR
             websocket.DispatchMessageQueue();
 #endif
+
+            if (websocket.State == WebSocketState.Open && !isStateUpdateLoopRunning)
+            {
+                StartCoroutine(StateUpdateLoop());
+                isStateUpdateLoopRunning = true;
+            }
         }
     }
 
@@ -109,7 +118,8 @@ public class StudyClient : MonoBehaviour
                 string jsonResponse = webRequest.downloadHandler.text;
                 Debug.Log($"Get Game Connection Response: {jsonResponse}");
                 gameConnectionData = JsonConvert.DeserializeObject<GameConnectionData>(jsonResponse);
-                Debug.Log("Game connection data received.");
+                levelInfo = gameConnectionData.level_info;
+                Debug.Log($"Game connection data received for level: {levelInfo.name}");
                 ConnectToGameServer();
             }
         }
@@ -139,6 +149,7 @@ public class StudyClient : MonoBehaviour
             Debug.Log("Connection open!");
             SendReadyMessage();
             StartCoroutine(StateUpdateLoop());
+            isStateUpdateLoopRunning = true;
         };
 
         websocket.OnError += (e) => { Debug.LogError("Error! " + e); };
@@ -149,20 +160,41 @@ public class StudyClient : MonoBehaviour
             var message = Encoding.UTF8.GetString(bytes);
             try
             {
-                var state = JsonConvert.DeserializeObject<StateRepresentation>(message);
-                Debug.Log($"Received state with ended = {state.ended}");
-                if (state != null && state.players != null)
+                // First, check if it's a state message by looking for key fields
+                var genericMessage = JsonConvert.DeserializeObject<Dictionary<string, object>>(message);
+                if (genericMessage.ContainsKey("players") && genericMessage.ContainsKey("counters"))
                 {
-                    OnStateReceived?.Invoke(state);
-
-                    if (state.ended)
+                    var state = JsonConvert.DeserializeObject<StateRepresentation>(message);
+                    Debug.Log($"Received state with ended = {state.ended}");
+                    if (state != null)
                     {
-                        if (nextLevelCanvas != null && !nextLevelCanvas.activeSelf)
+                        OnStateReceived?.Invoke(state);
+
+                        if (state.ended)
                         {
-                            // Enqueue the action to be executed on the main thread
-                            mainThreadActions.Enqueue(() => nextLevelCanvas.SetActive(true));
+                            if (nextLevelCanvas != null && !nextLevelCanvas.activeSelf)
+                            {
+                                NextLevelUI nextLevelUI = nextLevelCanvas.GetComponent<NextLevelUI>();
+                                if (nextLevelUI != null)
+                                {
+                                    if (nextLevelUI != null)
+                                {
+                                    Debug.Log($"Attempting to show NextLevelUI. Canvas active: {nextLevelCanvas.activeSelf}. UI component present: {nextLevelUI != null}");
+                                    mainThreadActions.Enqueue(() => nextLevelUI.Show(int.Parse(levelInfo.name.Split('_').Last()), state.score, state.served_meals));
+                                }
+                                else
+                                {
+                                    Debug.LogError("NextLevelUI component is null on NextLevelCanvas.");
+                                }
+                                }
+                            }
                         }
                     }
+                }
+                else if (genericMessage.ContainsKey("request_type") && genericMessage["request_type"].ToString() == "action")
+                {
+                    // Expected response for an action, no need to log as an error
+                    Debug.Log($"Action response: {message}");
                 }
                 else
                 {
@@ -171,7 +203,7 @@ public class StudyClient : MonoBehaviour
             }
             catch (Exception e)
             {
-                Debug.LogError($"Failed to deserialize message: {e.Message}\nMessage content: {message}");
+                Debug.LogError($"Failed to process message: {e.Message}\nMessage content: {message}");
             }
         };
 
@@ -211,6 +243,7 @@ public class StudyClient : MonoBehaviour
                 Debug.Log("Received new game connection data.");
                 string jsonResponse = webRequest.downloadHandler.text;
                 gameConnectionData = JsonConvert.DeserializeObject<GameConnectionData>(jsonResponse);
+                levelInfo = gameConnectionData.level_info;
 
                 // Hide the canvas and reconnect
                 if (nextLevelCanvas != null)
@@ -256,15 +289,9 @@ public class StudyClient : MonoBehaviour
     
     public void RequestState()
     {
-        // This now sends a message that the server might not handle, but it triggers the server to send back a state.
-        // This seems to be how the python client works.
-        string playerHash = "";
-        foreach (var player in gameConnectionData.player_info.Values)
-        {
-            playerHash = player.player_hash;
-            break;
-        }
-        WebsocketMessage message = new WebsocketMessage { type = "get_state", player_hash = playerHash };
+        if (string.IsNullOrEmpty(myPlayerHash)) return; // Don't send if we don't have a hash yet
+
+        WebsocketMessage message = new WebsocketMessage { type = "get_state", player_hash = myPlayerHash };
         SendWebSocketMessage(JsonConvert.SerializeObject(message));
     }
 
@@ -291,6 +318,7 @@ public class StudyClient : MonoBehaviour
             RequestState();
             yield return new WaitForSeconds(1f / 30f); // 30 FPS
         }
+        isStateUpdateLoopRunning = false;
     }
 }
 

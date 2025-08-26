@@ -24,11 +24,11 @@ public class StateRepresentation : IEquatable<StateRepresentation>
     {
         if (other is null) return false;
         if (ReferenceEquals(this, other)) return true;
-        return players.SequenceEqual(other.players) &&
-               counters.SequenceEqual(other.counters) &&
+        return (players == null ? other.players == null : players.SequenceEqual(other.players)) &&
+               (counters == null ? other.counters == null : counters.SequenceEqual(other.counters)) &&
                kitchen.Equals(other.kitchen) &&
                score == other.score &&
-               orders.SequenceEqual(other.orders) &&
+               (orders == null ? other.orders == null : orders.SequenceEqual(other.orders)) &&
                ended == other.ended &&
                remaining_time == other.remaining_time;
     }

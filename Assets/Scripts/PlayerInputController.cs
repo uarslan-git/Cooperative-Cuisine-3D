@@ -13,6 +13,8 @@ public class PlayerInputController : MonoBehaviour
 
     private Vector2 _moveInput;
 
+    public GameManager gameManager;
+
     void Awake()
     {
         // Automatically find the StudyClient in the scene when the player is instantiated.
@@ -23,6 +25,16 @@ public class PlayerInputController : MonoBehaviour
         if (studyClient == null)
         {
             Debug.LogError("PlayerInputController could not find a StudyClient in the scene!");
+        }
+
+        // Automatically find the GameManager in the scene.
+        if (gameManager == null)
+        {
+            gameManager = FindFirstObjectByType<GameManager>();
+        }
+        if (gameManager == null)
+        {
+            Debug.LogError("PlayerInputController could not find a GameManager in the scene!");
         }
 
         if (playerInput == null)
@@ -42,6 +54,16 @@ public class PlayerInputController : MonoBehaviour
 
     void Update()
     {
+        if (gameManager != null && gameManager.lastState != null && gameManager.lastState.ended)
+        {
+            if (playerInput != null && playerInput.actions.FindActionMap("Player").enabled)
+            {
+                playerInput.actions.FindActionMap("Player").Disable();
+                Debug.Log("Player input disabled: Game ended.");
+            }
+            return;
+        }
+
         if (_moveInput != Vector2.zero)
         {
             SendMoveAction(_moveInput);
