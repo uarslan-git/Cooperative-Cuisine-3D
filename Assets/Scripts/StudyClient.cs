@@ -58,7 +58,9 @@ public class StudyClient : MonoBehaviour
 
     
 
-    IEnumerator StartStudy()
+    
+
+    public IEnumerator StartStudy()
     {
         string url = $"http://{studyHost}:{studyPort}/start_study/{participantId}/{numPlayers}";
         using (UnityWebRequest webRequest = UnityWebRequest.Post(url, new WWWForm()))

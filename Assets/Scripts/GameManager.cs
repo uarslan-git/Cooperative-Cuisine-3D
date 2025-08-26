@@ -48,6 +48,18 @@ public class GameManager : MonoBehaviour
         if (!floorInstantiated && lastState.kitchen != null) InstantiateFloor();
         scoreText.text = $"Score: {lastState.score}";
         timeText.text = $"Time: {Mathf.FloorToInt(lastState.remaining_time)}";
+
+        // Check if timer runs out
+        if (lastState.remaining_time <= 0 && studyClient != null)
+        {
+            Debug.Log("Timer ran out! Loading next map...");
+            // Clear existing game objects before loading new map
+            ClearGameObjects();
+            // Re-initiate the study to load the next map
+            StartCoroutine(studyClient.StartStudy());
+            return; // Exit to prevent further updates with old state
+        }
+
         UpdateOrders();
 
         HashSet<string> activeItemIDs = new HashSet<string>();
@@ -212,5 +224,35 @@ public class GameManager : MonoBehaviour
         } else {
             Debug.LogError("Floor prefab not found in Resources/Prefabs!");
         }
+    }
+
+    private void ClearGameObjects()
+    {
+        foreach (var itemObj in itemObjects.Values)
+        {
+            Destroy(itemObj);
+        }
+        itemObjects.Clear();
+
+        foreach (var playerObj in players.Values)
+        {
+            Destroy(playerObj);
+        }
+        players.Clear();
+
+        foreach (var counterObj in counters.Values)
+        {
+            Destroy(counterObj);
+        }
+        counters.Clear();
+
+        foreach (var progressBar in progressBars.Values)
+        {
+            Destroy(progressBar.transform.root.gameObject);
+        }
+        progressBars.Clear();
+
+        // Reset floor instantiated flag
+        floorInstantiated = false;
     }
 }
