@@ -49,16 +49,7 @@ public class GameManager : MonoBehaviour
         scoreText.text = $"Score: {lastState.score}";
         timeText.text = $"Time: {Mathf.FloorToInt(lastState.remaining_time)}";
 
-        // Check if timer runs out
-        if (lastState.remaining_time <= 0 && studyClient != null)
-        {
-            Debug.Log("Timer ran out! Loading next map...");
-            // Clear existing game objects before loading new map
-            ClearGameObjects();
-            // Re-initiate the study to load the next map
-            StartCoroutine(studyClient.StartStudy());
-            return; // Exit to prevent further updates with old state
-        }
+        
 
         UpdateOrders();
 

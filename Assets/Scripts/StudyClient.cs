@@ -7,6 +7,8 @@ using System.Collections.Generic;
 using System.Text;
 using NativeWebSocket;
 
+using System.Collections.Concurrent;
+
 public class StudyClient : MonoBehaviour
 {
     public string studyHost = "localhost";
@@ -19,8 +21,10 @@ public class StudyClient : MonoBehaviour
     public Action<StateRepresentation> OnStateReceived;
     private GameConnectionData gameConnectionData;
     private WebSocket websocket;
+    private readonly ConcurrentQueue<System.Action> mainThreadActions = new ConcurrentQueue<System.Action>();
 
     public GameManager gameManager;
+    public GameObject nextLevelCanvas;
     
     void Start()
     {
@@ -33,6 +37,11 @@ public class StudyClient : MonoBehaviour
             cameraObj.tag = "MainCamera";
             cameraObj.transform.position = new Vector3(6, 15, -2);
             cameraObj.transform.rotation = Quaternion.Euler(60, 0, 0);
+        }
+
+        if (nextLevelCanvas != null)
+        {
+            nextLevelCanvas.SetActive(false);
         }
 
         gameManager = FindFirstObjectByType<GameManager>();
@@ -48,6 +57,12 @@ public class StudyClient : MonoBehaviour
 
     void Update()
     {
+        // Process any actions that have been queued from background threads
+        while (mainThreadActions.TryDequeue(out var action))
+        {
+            action();
+        }
+
         if (websocket != null)
         {
 #if !UNITY_WEBGL || UNITY_EDITOR
@@ -134,15 +149,23 @@ public class StudyClient : MonoBehaviour
             var message = Encoding.UTF8.GetString(bytes);
             try
             {
-                // Try to parse it as a state representation first
                 var state = JsonConvert.DeserializeObject<StateRepresentation>(message);
+                Debug.Log($"Received state with ended = {state.ended}");
                 if (state != null && state.players != null)
                 {
                     OnStateReceived?.Invoke(state);
+
+                    if (state.ended)
+                    {
+                        if (nextLevelCanvas != null && !nextLevelCanvas.activeSelf)
+                        {
+                            // Enqueue the action to be executed on the main thread
+                            mainThreadActions.Enqueue(() => nextLevelCanvas.SetActive(true));
+                        }
+                    }
                 }
                 else
                 {
-                    // Handle other message types if necessary
                     Debug.Log($"Received non-state message: {message}");
                 }
             }
@@ -153,6 +176,64 @@ public class StudyClient : MonoBehaviour
         };
 
         await websocket.Connect();
+    }
+
+    public void InitiateNextLevel()
+    {
+        StartCoroutine(RequestNextLevel());
+    }
+
+    private IEnumerator RequestNextLevel()
+    {
+        // First, notify the server that this player is done
+        string levelDoneUrl = $"http://{studyHost}:{studyPort}/level_done/{participantId}";
+        using (UnityWebRequest webRequest = UnityWebRequest.Post(levelDoneUrl, new WWWForm()))
+        {
+            yield return webRequest.SendWebRequest();
+            if (webRequest.result != UnityWebRequest.Result.Success)
+            {
+                Debug.LogError($"Error sending level done message: {webRequest.error}");
+                yield break; // Stop if this fails
+            }
+            Debug.Log("Level done message sent successfully.");
+        }
+
+        // Now, get the connection for the *next* level
+        string gameConnectionUrl = $"http://{studyHost}:{studyPort}/get_game_connection/{participantId}";
+        using (UnityWebRequest webRequest = UnityWebRequest.Post(gameConnectionUrl, new WWWForm()))
+        {
+            // This might take time as the server waits for other players
+            Debug.Log("Waiting for other players to finish...");
+            yield return webRequest.SendWebRequest();
+
+            if (webRequest.result == UnityWebRequest.Result.Success)
+            {
+                Debug.Log("Received new game connection data.");
+                string jsonResponse = webRequest.downloadHandler.text;
+                gameConnectionData = JsonConvert.DeserializeObject<GameConnectionData>(jsonResponse);
+
+                // Hide the canvas and reconnect
+                if (nextLevelCanvas != null)
+                {
+                    nextLevelCanvas.SetActive(false);
+                }
+                
+                ReconnectAfterLevelEnd();
+            }
+            else
+            {
+                Debug.LogError($"Error getting new game connection: {webRequest.error}");
+            }
+        }
+    }
+
+    private async void ReconnectAfterLevelEnd()
+    {
+        if (websocket != null)
+        {
+            await websocket.Close();
+        }
+        ConnectToGameServer();
     }
 
     void SendReadyMessage()
