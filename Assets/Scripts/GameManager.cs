@@ -1,4 +1,3 @@
-
 using UnityEngine;
 using UnityEngine.UI;
 using System.Collections.Generic;
@@ -23,6 +22,12 @@ public class GameManager : MonoBehaviour
     private GameObject progressBarPrefab;
 
     private bool floorInstantiated = false;
+    
+    // Track last known object states to avoid unnecessary updates
+    private string lastCountersHash = "";
+    private string lastItemsHash = "";
+    private float lastScore = -1;
+    private float lastTime = -1;
 
     void Start()
     {
@@ -34,71 +39,23 @@ public class GameManager : MonoBehaviour
 
     public void HandleStateReceived(StateRepresentation newState)
     {
-        if (lastState == null || !newState.Equals(lastState))
-        {
-            lastState = newState;
-            UpdateWorld();
-        }
-    }
-
-    void UpdateWorld()
-    {
-        if (lastState == null) return;
-
-        if (!floorInstantiated && lastState.kitchen != null) InstantiateFloor();
-        scoreText.text = $"Score: {lastState.score}";
-        timeText.text = $"Time: {Mathf.FloorToInt(lastState.remaining_time)}";
-
+        lastState = newState;
         
-
+        // Always update players (they move frequently)
+        UpdatePlayers();
+        
+        // Only update UI if score or time changed
+        UpdateUI();
+        
+        // Only update objects if their state actually changed
+        UpdateObjectsIfChanged();
+        
+        // Always update orders (they can appear/disappear)
         UpdateOrders();
-
-        HashSet<string> activeItemIDs = new HashSet<string>();
-        HashSet<string> activeProgressIDs = new HashSet<string>();
-
-        if (lastState.players != null) {
-            foreach (var playerState in lastState.players) {
-                GameObject playerObj = UpdatePlayer(playerState);
-                if (playerState.holding != null) {
-                    activeItemIDs.Add(playerState.holding.id);
-                    UpdateItem(playerState.holding, playerObj.transform.Find("HoldingSpot"));
-                    if (playerState.holding.progress_percentage > 0) {
-                        activeProgressIDs.Add(playerState.holding.id);
-                        UpdateProgressBar(playerState.holding.id, itemObjects[playerState.holding.id].transform, playerState.holding.progress_percentage);
-                    }
-                }
-            }
-        }
-
-        if (lastState.counters != null) {
-            foreach (var counterState in lastState.counters) {
-                GameObject counterObj = UpdateCounter(counterState);
-                if (counterState.occupied_by != null) {
-                    foreach (ItemState itemState in counterState.occupied_by) {
-                        activeItemIDs.Add(itemState.id);
-                        UpdateItem(itemState, counterObj.transform);
-                        if (itemState.progress_percentage > 0) {
-                            activeProgressIDs.Add(itemState.id);
-                            UpdateProgressBar(itemState.id, itemObjects[itemState.id].transform, itemState.progress_percentage);
-                        }
-                    }
-                }
-            }
-        }
-
-        foreach (var itemID in itemObjects.Keys.ToList()) {
-            if (!activeItemIDs.Contains(itemID)) {
-                itemObjects[itemID].SetActive(false);
-            }
-        }
-
-        foreach (var progressId in progressBars.Keys.ToList()) {
-            if (!activeProgressIDs.Contains(progressId)) {
-                Destroy(progressBars[progressId].transform.root.gameObject);
-                progressBars.Remove(progressId);
-            }
-        }
     }
+
+    // Old UpdateWorld method - replaced with selective update methods above
+    // void UpdateWorld() - REMOVED to prevent performance issues
 
     private void UpdateItem(ItemState itemState, Transform parent)
     {
@@ -245,5 +202,137 @@ public class GameManager : MonoBehaviour
 
         // Reset floor instantiated flag
         floorInstantiated = false;
+    }
+
+    private void UpdatePlayers()
+    {
+        if (lastState?.players == null) return;
+        
+        foreach (var playerState in lastState.players)
+        {
+            UpdatePlayer(playerState);
+        }
+    }
+    
+    private void UpdateUI()
+    {
+        if (lastState == null) return;
+        
+        // Only update if values changed
+        if (lastScore != lastState.score)
+        {
+            lastScore = lastState.score;
+            scoreText.text = $"Score: {lastState.score}";
+        }
+        
+        if (lastTime != lastState.remaining_time)
+        {
+            lastTime = lastState.remaining_time;
+            timeText.text = $"Time: {Mathf.FloorToInt(lastState.remaining_time)}";
+        }
+    }
+    
+    private void UpdateObjectsIfChanged()
+    {
+        if (lastState == null) return;
+        
+        if (!floorInstantiated && lastState.kitchen != null) InstantiateFloor();
+        
+        // Create hash of current counter states to detect changes
+        string currentCountersHash = GetCountersHash();
+        
+        if (currentCountersHash != lastCountersHash)
+        {
+            lastCountersHash = currentCountersHash;
+            UpdateCountersAndItems();
+        }
+    }
+    
+    private string GetCountersHash()
+    {
+        if (lastState?.counters == null) return "";
+        
+        var hashData = new System.Text.StringBuilder();
+        foreach (var counter in lastState.counters)
+        {
+            hashData.Append($"{counter.id}:{counter.occupied_by?.Count ?? 0}");
+            if (counter.occupied_by != null)
+            {
+                foreach (var item in counter.occupied_by)
+                {
+                    hashData.Append($":{item.id}:{item.type}:{item.progress_percentage}");
+                }
+            }
+        }
+        return hashData.ToString();
+    }
+    
+    private void UpdateCountersAndItems()
+    {
+        HashSet<string> activeItemIDs = new HashSet<string>();
+        HashSet<string> activeProgressIDs = new HashSet<string>();
+
+        // Update items held by players
+        if (lastState.players != null)
+        {
+            foreach (var playerState in lastState.players)
+            {
+                if (playerState.holding != null)
+                {
+                    GameObject playerObj = players.ContainsKey(playerState.id) ? players[playerState.id] : null;
+                    if (playerObj != null)
+                    {
+                        activeItemIDs.Add(playerState.holding.id);
+                        UpdateItem(playerState.holding, playerObj.transform.Find("HoldingSpot"));
+                        if (playerState.holding.progress_percentage > 0)
+                        {
+                            activeProgressIDs.Add(playerState.holding.id);
+                            UpdateProgressBar(playerState.holding.id, itemObjects[playerState.holding.id].transform, playerState.holding.progress_percentage);
+                        }
+                    }
+                }
+            }
+        }
+
+        // Update counters and their items
+        if (lastState.counters != null)
+        {
+            foreach (var counterState in lastState.counters)
+            {
+                GameObject counterObj = UpdateCounter(counterState);
+                if (counterState.occupied_by != null)
+                {
+                    foreach (ItemState itemState in counterState.occupied_by)
+                    {
+                        activeItemIDs.Add(itemState.id);
+                        UpdateItem(itemState, counterObj.transform);
+                        if (itemState.progress_percentage > 0)
+                        {
+                            activeProgressIDs.Add(itemState.id);
+                            UpdateProgressBar(itemState.id, itemObjects[itemState.id].transform, itemState.progress_percentage);
+                        }
+                    }
+                }
+            }
+        }
+
+        // Hide inactive items
+        foreach (var itemID in itemObjects.Keys.ToList())
+        {
+            if (!activeItemIDs.Contains(itemID))
+            {
+                itemObjects[itemID].SetActive(false);
+            }
+        }
+
+        // Remove inactive progress bars
+        foreach (var progressId in progressBars.Keys.ToList())
+        {
+            if (!activeProgressIDs.Contains(progressId))
+            {
+                Destroy(progressBars[progressId].transform.root.gameObject);
+                progressBars.Remove(progressId);
+            }
+        }
     }
 }

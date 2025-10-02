@@ -180,7 +180,24 @@ public class StudyClient : MonoBehaviour
                                     if (nextLevelUI != null)
                                 {
                                     Debug.Log($"Attempting to show NextLevelUI. Canvas active: {nextLevelCanvas.activeSelf}. UI component present: {nextLevelUI != null}");
-                                    mainThreadActions.Enqueue(() => nextLevelUI.Show(int.Parse(levelInfo.name.Split('_').Last()), state.score, state.served_meals));
+                                    
+                                    // Safely parse level number from levelInfo.name
+                                    int levelNumber = 1; // Default value
+                                    if (!string.IsNullOrEmpty(levelInfo?.name))
+                                    {
+                                        var nameParts = levelInfo.name.Split('_');
+                                        if (nameParts.Length > 0)
+                                        {
+                                            // Try to parse the last part, or first part if no underscore
+                                            string levelPart = nameParts.Length > 1 ? nameParts[nameParts.Length - 1] : nameParts[0];
+                                            if (!int.TryParse(levelPart, out levelNumber))
+                                            {
+                                                levelNumber = 1; // Fallback if parsing fails
+                                            }
+                                        }
+                                    }
+                                    
+                                    mainThreadActions.Enqueue(() => nextLevelUI.Show(levelNumber, state.score, state.served_meals));
                                 }
                                 else
                                 {
@@ -316,7 +333,7 @@ public class StudyClient : MonoBehaviour
         while (websocket != null && websocket.State == WebSocketState.Open)
         {
             RequestState();
-            yield return new WaitForSeconds(1f / 30f); // 30 FPS
+            yield return new WaitForSeconds(1f / 5f); // 5 FPS - much more reasonable for a cooking game
         }
         isStateUpdateLoopRunning = false;
     }
