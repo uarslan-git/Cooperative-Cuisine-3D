@@ -133,6 +133,7 @@ public class StudyClient : MonoBehaviour
             websocketUrl = player.websocket_url;
             myPlayerId = player.player_id;
             myPlayerHash = player.player_hash;
+            Debug.Log($"Setting up player connection - ID: {myPlayerId}, Hash: {myPlayerHash}");
             break;
         }
 
@@ -283,6 +284,13 @@ public class StudyClient : MonoBehaviour
         {
             await websocket.Close();
         }
+        
+        // Clear previous level state and reset player controller
+        if (gameManager != null)
+        {
+            gameManager.OnNewLevelStarted();
+        }
+        
         ConnectToGameServer();
     }
 

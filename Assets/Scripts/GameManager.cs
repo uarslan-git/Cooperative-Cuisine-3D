@@ -93,15 +93,21 @@ public class GameManager : MonoBehaviour
             GameObject playerPrefab = Resources.Load<GameObject>("Prefabs/Player");
             playerObj = Instantiate(playerPrefab, position, rotation);
             players.Add(playerState.id, playerObj);
-            if (playerState.id == studyClient.myPlayerId) {
-                PlayerInputController pic = GetComponent<PlayerInputController>();
-                if (pic != null) pic.controlledPlayerGameObject = playerObj;
-            }
         } else {
             playerObj = players[playerState.id];
             playerObj.transform.position = position;
             playerObj.transform.rotation = rotation;
         }
+        
+        // Always ensure the controller is connected for the current player (important for level transitions)
+        if (playerState.id == studyClient.myPlayerId) {
+            PlayerInputController pic = GetComponent<PlayerInputController>();
+            if (pic != null && pic.controlledPlayerGameObject != playerObj) {
+                pic.controlledPlayerGameObject = playerObj;
+                Debug.Log($"Player controller reconnected to player {playerState.id} for new level");
+            }
+        }
+        
         return playerObj;
     }
 
@@ -200,8 +206,24 @@ public class GameManager : MonoBehaviour
         }
         progressBars.Clear();
 
-        // Reset floor instantiated flag
+        // Reset all tracking state
         floorInstantiated = false;
+        lastCountersHash = "";
+        lastItemsHash = "";
+        lastScore = -1;
+        lastTime = -1;
+    }
+    
+    public void OnNewLevelStarted()
+    {
+        Debug.Log("New level started - clearing previous game state");
+        ClearGameObjects();
+        
+        // Clear the player controller reference so it gets re-established
+        PlayerInputController pic = GetComponent<PlayerInputController>();
+        if (pic != null) {
+            pic.controlledPlayerGameObject = null;
+        }
     }
 
     private void UpdatePlayers()
