@@ -96,26 +96,113 @@ public class GameManager : MonoBehaviour
     private void UpdateItem(ItemState itemState, Transform parent)
     {
         GameObject itemObj;
+        bool needsRecreate = false;
+        
         if (itemObjects.ContainsKey(itemState.id)) {
             itemObj = itemObjects[itemState.id];
-            itemObj.SetActive(true);
+            
+            // Check if item type has changed (e.g., Tomato → ChoppedTomato)
+            string currentType = itemObj.name.Split('_')[1]; // Extract type from "Item_Type_ID" format
+            if (currentType != itemState.type) {
+                // Item has been processed - destroy old and create new
+                Destroy(itemObj);
+                itemObjects.Remove(itemState.id);
+                needsRecreate = true;
+            } else {
+                itemObj.SetActive(true);
+            }
         } else {
+            needsRecreate = true;
+        }
+        
+        if (needsRecreate) {
             GameObject itemPrefab = Resources.Load<GameObject>($"Prefabs/{itemState.type}");
             if (itemPrefab == null) {
                 itemPrefab = GameObject.CreatePrimitive(PrimitiveType.Sphere);
                 itemPrefab.name = $"Item_{itemState.type}_Default";
-                itemPrefab.transform.localScale = new Vector3(0.5f, 0.5f, 0.5f);
             }
             itemObj = Instantiate(itemPrefab);
             itemObj.name = $"Item_{itemState.type}_{itemState.id}";
+            
+            // Ensure consistent sizing for all items (especially food items)
+            if (itemState.type == "Tomato" || itemState.type == "Onion" || 
+                itemState.type == "ChoppedTomato" || itemState.type == "ChoppedOnion" || itemState.type == "ChoppedLettuce")
+            {
+                itemObj.transform.localScale = new Vector3(0.3f, 0.3f, 0.3f); // Smaller for most food items
+            }
+            else if (itemState.type == "Lettuce")
+            {
+                itemObj.transform.localScale = new Vector3(0.05f, 0.05f, 0.05f); // Extra small for lettuce
+            }
+            else
+            {
+                itemObj.transform.localScale = new Vector3(0.5f, 0.5f, 0.5f); // Default size for other items
+            }
+            
             itemObjects[itemState.id] = itemObj;
+        } else {
+            // Get existing item object if not recreating
+            itemObj = itemObjects[itemState.id];
         }
 
         if (itemObj.transform.parent != parent)
         {
             itemObj.transform.SetParent(parent, false);
             itemObj.transform.localRotation = Quaternion.identity;
-            itemObj.transform.localPosition = (parent.name == "HoldingSpot") ? Vector3.zero : new Vector3(0, 1f, 0);
+            
+            // Check if this is a base vegetable that needs a plate
+            bool isBaseVegetable = itemState.type == "Lettuce" || itemState.type == "Onion" || itemState.type == "Tomato";
+            
+            // Determine item position based on parent type
+            if (parent.name == "HoldingSpot") {
+                itemObj.transform.localPosition = Vector3.zero;
+            } else if (parent.name.StartsWith("Counter_")) {
+                // Check if this counter is a stove for stacking logic
+                string counterType = GetCounterType(parent.name);
+                
+                if (counterType == "Stove" && IsChoppedVegetable(itemState.type)) {
+                    // Stack chopped vegetables on stoves to show quantity
+                    int itemsOnStove = CountItemsOnCounter(parent, itemState.type);
+                    float stackHeight = 1f + (itemsOnStove * 0.2f); // Stack them 0.2 units apart
+                    itemObj.transform.localPosition = new Vector3(0, stackHeight, 0);
+                } else if (isBaseVegetable) {
+                    // For base vegetables on counters, create a plate underneath
+                    string plateId = $"Plate_for_{parent.name}_{itemState.type}";
+                    GameObject plateObj;
+                    
+                    if (!itemObjects.ContainsKey(plateId)) {
+                        GameObject platePrefab = Resources.Load<GameObject>("Prefabs/Plate");
+                        if (platePrefab == null) {
+                            platePrefab = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+                            platePrefab.name = "Plate_Default";
+                            // Make the default plate white and flat
+                            Material plateMaterial = new Material(Shader.Find("Standard"));
+                            plateMaterial.color = Color.white;
+                            platePrefab.GetComponent<Renderer>().material = plateMaterial;
+                        }
+                        plateObj = Instantiate(platePrefab);
+                        plateObj.name = $"Plate_{plateId}";
+                        plateObj.transform.localScale = new Vector3(0.4f, 0.05f, 0.4f); // Thinner plate
+                        itemObjects[plateId] = plateObj;
+                        
+                        // Position plate directly on counter surface
+                        plateObj.transform.SetParent(parent, false);
+                        plateObj.transform.localPosition = new Vector3(0, 0.5f + 0.025f, 0); // Counter top + half plate height
+                    } else {
+                        plateObj = itemObjects[plateId];
+                    }
+                    
+                    // Place vegetable directly on top of the plate (not floating)
+                    float plateTop = 0.5f + 0.05f; // Counter height + plate thickness
+                    itemObj.transform.localPosition = new Vector3(0, plateTop + 0.01f, 0); // Small gap to avoid clipping
+                } else {
+                    // Non-vegetable items - place normally on top of counter
+                    itemObj.transform.localPosition = new Vector3(0, 1f, 0);
+                }
+            } else {
+                // Default position for other counter types
+                itemObj.transform.localPosition = new Vector3(0, 1f, 0);
+            }
         }
     }
 
@@ -185,12 +272,14 @@ public class GameManager : MonoBehaviour
         Quaternion rotation = Quaternion.LookRotation(new Vector3(counterState.orientation[0], 0, -counterState.orientation[1]));
 
         if (!counters.ContainsKey(counterState.id)) {
+            // Create counter based on type
             GameObject counterPrefab = Resources.Load<GameObject>($"Prefabs/{counterState.type}");
             if (counterPrefab == null) {
                 counterPrefab = GameObject.CreatePrimitive(PrimitiveType.Cube);
                 counterPrefab.name = counterState.type;
             }
             counterObj = Instantiate(counterPrefab, position, rotation);
+            counterObj.name = $"Counter_{counterState.id}";
             
             // Ensure counter has a collider for collision detection
             if (counterObj.GetComponent<Collider>() == null)
@@ -207,27 +296,73 @@ public class GameManager : MonoBehaviour
     }
 
     private void UpdateProgressBar(string id, Transform parent, float progress) {
+        if (progressBarPrefab == null) {
+            Debug.LogError("ProgressBar prefab is null! Cannot create progress bar.");
+            return;
+        }
+        
         Slider progressBar;
         if (!progressBars.ContainsKey(id)) {
-            GameObject canvasObj = new GameObject($"ProgressBarCanvas_{id}");
-            Canvas canvas = canvasObj.AddComponent<Canvas>();
+            Debug.Log($"Creating new progress bar for item {id}");
+            
+            // Create progress bar directly from prefab
+            GameObject progressBarObj = Instantiate(progressBarPrefab);
+            progressBarObj.name = $"ProgressBar_{id}";
+            
+            // Set up world space canvas
+            Canvas canvas = progressBarObj.GetComponent<Canvas>();
+            if (canvas == null) {
+                canvas = progressBarObj.AddComponent<Canvas>();
+            }
             canvas.renderMode = RenderMode.WorldSpace;
-            canvasObj.AddComponent<CanvasScaler>().dynamicPixelsPerUnit = 10;
-            canvasObj.AddComponent<LookAtCamera>();
+            
+            CanvasScaler scaler = progressBarObj.GetComponent<CanvasScaler>();
+            if (scaler == null) {
+                scaler = progressBarObj.AddComponent<CanvasScaler>();
+            }
+            scaler.dynamicPixelsPerUnit = 10;
+            
+            // Add LookAtCamera if it doesn't exist
+            if (progressBarObj.GetComponent<LookAtCamera>() == null) {
+                progressBarObj.AddComponent<LookAtCamera>();
+            }
 
-            GameObject progressBarObj = Instantiate(progressBarPrefab, canvasObj.transform);
-            progressBar = progressBarObj.GetComponentInChildren<Slider>();
+            // Get the slider component
+            progressBar = progressBarObj.GetComponent<Slider>();
+            if (progressBar == null) {
+                progressBar = progressBarObj.GetComponentInChildren<Slider>();
+            }
+            
+            if (progressBar == null) {
+                Debug.LogError($"No Slider component found in ProgressBar prefab for item {id}!");
+                Destroy(progressBarObj);
+                return;
+            }
+            
             progressBars.Add(id, progressBar);
 
-            RectTransform canvasRect = canvasObj.GetComponent<RectTransform>();
-            canvasRect.sizeDelta = new Vector2(1, 0.3f);
-            canvasRect.localScale = new Vector3(0.01f, 0.01f, 0.01f);
+            // Set up the rect transform for proper sizing
+            RectTransform rectTransform = progressBarObj.GetComponent<RectTransform>();
+            if (rectTransform != null) {
+                rectTransform.sizeDelta = new Vector2(100, 20); // Reasonable size in world space
+                rectTransform.localScale = new Vector3(0.01f, 0.01f, 0.01f); // Scale down for world space
+            }
+            
+            Debug.Log($"Successfully created progress bar for item {id}");
         } else {
             progressBar = progressBars[id];
         }
-        progressBar.transform.root.position = parent.position + Vector3.up * 1.5f;
-        progressBar.value = progress / 100f;
-        progressBar.transform.root.gameObject.SetActive(true);
+        
+        // Position and update the progress bar
+        if (progressBar != null && progressBar.transform.root != null) {
+            progressBar.transform.root.position = parent.position + Vector3.up * 2.0f;
+            progressBar.value = progress / 100f;
+            progressBar.transform.root.gameObject.SetActive(true);
+            
+            Debug.Log($"Updated progress bar for {id}: {progress}% (value: {progressBar.value}) at position {progressBar.transform.root.position}");
+        } else {
+            Debug.LogError($"Progress bar or its root transform is null for item {id}");
+        }
     }
 
     private void UpdateOrders() {
@@ -381,7 +516,7 @@ public class GameManager : MonoBehaviour
                     {
                         activeItemIDs.Add(playerState.holding.id);
                         UpdateItem(playerState.holding, playerObj.transform.Find("HoldingSpot"));
-                        if (playerState.holding.progress_percentage > 0)
+                        if (playerState.holding.progress_percentage > 0 && playerState.holding.progress_percentage < 100)
                         {
                             activeProgressIDs.Add(playerState.holding.id);
                             UpdateProgressBar(playerState.holding.id, itemObjects[playerState.holding.id].transform, playerState.holding.progress_percentage);
@@ -403,7 +538,7 @@ public class GameManager : MonoBehaviour
                     {
                         activeItemIDs.Add(itemState.id);
                         UpdateItem(itemState, counterObj.transform);
-                        if (itemState.progress_percentage > 0)
+                        if (itemState.progress_percentage > 0 && itemState.progress_percentage < 100)
                         {
                             activeProgressIDs.Add(itemState.id);
                             UpdateProgressBar(itemState.id, itemObjects[itemState.id].transform, itemState.progress_percentage);
@@ -431,5 +566,44 @@ public class GameManager : MonoBehaviour
                 progressBars.Remove(progressId);
             }
         }
+    }
+    
+    // Helper methods for item positioning and stacking
+    private string GetCounterType(string counterName)
+    {
+        // Extract counter ID and find the counter type from lastState
+        if (counterName.StartsWith("Counter_"))
+        {
+            string counterId = counterName.Substring("Counter_".Length);
+            if (lastState?.counters != null)
+            {
+                foreach (var counter in lastState.counters)
+                {
+                    if (counter.id == counterId)
+                    {
+                        return counter.type;
+                    }
+                }
+            }
+        }
+        return "Unknown";
+    }
+    
+    private bool IsChoppedVegetable(string itemType)
+    {
+        return itemType == "ChoppedTomato" || itemType == "ChoppedOnion" || itemType == "ChoppedLettuce";
+    }
+    
+    private int CountItemsOnCounter(Transform counterTransform, string itemType)
+    {
+        int count = 0;
+        foreach (Transform child in counterTransform)
+        {
+            if (child.name.Contains($"Item_{itemType}_"))
+            {
+                count++;
+            }
+        }
+        return count;
     }
 }
