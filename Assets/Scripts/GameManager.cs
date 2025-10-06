@@ -24,7 +24,7 @@ public class GameManager : MonoBehaviour
     // For smooth movement interpolation
     private Dictionary<string, Vector3> targetPositions = new Dictionary<string, Vector3>();
     private Dictionary<string, Quaternion> targetRotations = new Dictionary<string, Quaternion>();
-    private float movementLerpSpeed = 25f; // Much faster interpolation for ultra-smooth movement
+    // movementLerpSpeed removed - now using fixed values per player type
 
     private bool floorInstantiated = false;
     
@@ -51,13 +51,13 @@ public class GameManager : MonoBehaviour
             
             if (targetPositions.ContainsKey(playerId) && targetRotations.ContainsKey(playerId))
             {
-                // Skip position interpolation for local player (they move client-side)
-                // but still interpolate rotation for smooth turning
+                // Apply server updates to ALL players - server is now authoritative for everyone
                 if (playerId == studyClient.myPlayerId) {
-                    // Only interpolate rotation for local player
-                    playerObj.transform.rotation = Quaternion.Lerp(playerObj.transform.rotation, targetRotations[playerId], 50f * Time.deltaTime);
+                    // Local player: smooth interpolation from server position (server-authoritative)
+                    playerObj.transform.position = Vector3.Lerp(playerObj.transform.position, targetPositions[playerId], 20f * Time.deltaTime);
+                    playerObj.transform.rotation = Quaternion.Lerp(playerObj.transform.rotation, targetRotations[playerId], 20f * Time.deltaTime);
                 } else {
-                    // Full interpolation for remote players
+                    // Remote players: full interpolation as before
                     playerObj.transform.position = Vector3.Lerp(playerObj.transform.position, targetPositions[playerId], 40f * Time.deltaTime);
                     playerObj.transform.rotation = Quaternion.Lerp(playerObj.transform.rotation, targetRotations[playerId], 40f * Time.deltaTime);
                 }
@@ -121,6 +121,15 @@ public class GameManager : MonoBehaviour
             GameObject playerPrefab = Resources.Load<GameObject>("Prefabs/Player");
             playerObj = Instantiate(playerPrefab, targetPosition, targetRotation);
             players.Add(playerState.id, playerObj);
+            
+            // Add collider to player for collision detection if it doesn't have one
+            if (playerObj.GetComponent<Collider>() == null)
+            {
+                CapsuleCollider collider = playerObj.AddComponent<CapsuleCollider>();
+                collider.height = 1.8f;
+                collider.radius = 0.3f;
+                collider.isTrigger = false;
+            }
         } else {
             playerObj = players[playerState.id];
             // Don't set position/rotation directly - use interpolation system instead
@@ -130,17 +139,10 @@ public class GameManager : MonoBehaviour
         targetPositions[playerState.id] = targetPosition;
         targetRotations[playerState.id] = targetRotation;
         
-        // For local player, only apply server correction if there's significant difference
+        // For local player, now sync FROM server TO Unity for perfect synchronization
         if (playerState.id == studyClient.myPlayerId) {
-            Vector3 currentPos = playerObj.transform.position;
-            float distanceFromServer = Vector3.Distance(currentPos, targetPosition);
-            
-            // Only correct if server position is significantly different (> 0.5 units)
-            if (distanceFromServer > 0.5f) {
-                // Gradually correct towards server position
-                playerObj.transform.position = Vector3.Lerp(currentPos, targetPosition, 0.1f * Time.deltaTime);
-            }
-            // Otherwise, trust the client-side prediction
+            // Server is now authoritative - Unity follows server position
+            // This ensures perfect sync since server movement is smooth
         }
         
         // Always ensure the controller is connected for the current player (important for level transitions)
@@ -181,6 +183,14 @@ public class GameManager : MonoBehaviour
                 counterPrefab.name = counterState.type;
             }
             counterObj = Instantiate(counterPrefab, position, rotation);
+            
+            // Ensure counter has a collider for collision detection
+            if (counterObj.GetComponent<Collider>() == null)
+            {
+                BoxCollider collider = counterObj.AddComponent<BoxCollider>();
+                collider.size = new Vector3(0.9f, 1.0f, 0.9f); // Slightly smaller than visual for better movement
+            }
+            
             counters.Add(counterState.id, counterObj);
         } else {
             counterObj = counters[counterState.id];

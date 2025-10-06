@@ -223,7 +223,7 @@ public class StudyClient : MonoBehaviour
                 }
                 else
                 {
-                    Debug.Log($"Received non-state message: {message}");
+                    // Debug.Log($"Received non-state message: {message}"); // Commented out to reduce console spam
                 }
             }
             catch (Exception e)

@@ -14,7 +14,7 @@ public class PlayerInputController : MonoBehaviour
     private Vector2 _moveInput;
     private Vector2 _lastSentMoveInput;
     private float _lastMoveSentTime;
-    private float _moveSendInterval = 0.016f; // Send movement every 16ms (60 FPS) for ultra-smooth network updates
+    private float _moveSendInterval = 0.1f; // Send movement every 100ms (10 FPS) to prevent server overload
 
     public GameManager gameManager;
 
@@ -64,20 +64,20 @@ public class PlayerInputController : MonoBehaviour
             return;
         }
 
-        // Throttle movement sending and only send when input changes or at regular intervals
+        // Throttle movement sending - only send when direction changes or at intervals
         bool shouldSendMovement = false;
         
-        // Send if input changed even slightly (ultra-sensitive for immediate response)
-        if (Vector2.Distance(_moveInput, _lastSentMoveInput) > 0.001f)
+        // Send immediately if direction changed significantly
+        if (Vector2.Distance(_moveInput, _lastSentMoveInput) > 0.1f)
         {
             shouldSendMovement = true;
         }
-        // Or send at regular intervals if still moving
+        // Or send at regular intervals if still moving in same direction
         else if (_moveInput != Vector2.zero && Time.time - _lastMoveSentTime >= _moveSendInterval)
         {
             shouldSendMovement = true;
         }
-        // Or send stop command when input becomes zero
+        // Or send stop command immediately when input becomes zero
         else if (_moveInput == Vector2.zero && _lastSentMoveInput != Vector2.zero)
         {
             shouldSendMovement = true;
@@ -95,7 +95,7 @@ public class PlayerInputController : MonoBehaviour
     public void OnMove(InputValue value)
     {
         _moveInput = value.Get<Vector2>();
-        _moveInput.y = -_moveInput.y;
+        // Don't invert Y here - handle coordinate conversion in movement logic
     }
 
     // Called by the PlayerInput component when the "Interact" action is triggered
@@ -111,33 +111,51 @@ public class PlayerInputController : MonoBehaviour
 
     private void SendMoveAction(Vector2 move)
     {
-        if (studyClient == null) return;
+        if (studyClient == null || controlledPlayerGameObject == null) return;
         
-        // CLIENT-SIDE PREDICTION: Move the player immediately in Unity
-        if (controlledPlayerGameObject != null)
+        // Convert Unity input to server coordinate system
+        // Unity: X = left/right, Y = forward/back (W/S keys)
+        // Server: X = left/right, Y = back/forward (inverted)
+        Vector2 serverMove = new Vector2(move.x, -move.y); // Invert Y for server
+        
+        // SERVER-AUTHORITATIVE MOVEMENT: Only send input to server, let server handle movement
+        // Unity will receive and apply the server's position updates through GameManager
+        // No client-side movement - server controls everything for perfect sync
+        
+        // Update facing direction
+        if (move != Vector2.zero)
         {
-            Vector3 movement = new Vector3(move.x * 1.8f * Time.deltaTime, 0, move.y * 1.8f * Time.deltaTime);
-            controlledPlayerGameObject.transform.Translate(movement, Space.World);
-            
-            // Update facing direction
-            if (move != Vector2.zero)
-            {
-                Vector3 facingDirection = new Vector3(move.x, 0, move.y).normalized;
-                controlledPlayerGameObject.transform.rotation = Quaternion.LookRotation(facingDirection);
-            }
+            Vector3 facingDirection = new Vector3(move.x, 0, move.y).normalized;
+            controlledPlayerGameObject.transform.rotation = Quaternion.LookRotation(facingDirection);
         }
         
-        // Still send action to server for authoritative state
-        Action action = new Action
+        // Send movement vectors to server (what the server expects)
+        // Send normalized movement direction, not velocity - let server handle speed
+        if (move != Vector2.zero)
         {
-            player = studyClient.myPlayerId,
-            action_type = "movement",
-            action_data = new System.Collections.Generic.List<float> { move.x * 1.8f, move.y * 1.8f },
-            duration = Time.deltaTime,
-            player_hash = studyClient.myPlayerHash
-        };
-        studyClient.SendAction(action);
-        // Debug.Log("Sent Move Action: " + move); // Commented out to reduce console spam
+            Action action = new Action
+            {
+                player = studyClient.myPlayerId,
+                action_type = "movement",
+                action_data = new System.Collections.Generic.List<float> { serverMove.x, serverMove.y }, // Send direction only, not velocity
+                duration = _moveSendInterval, // Use the send interval as duration
+                player_hash = studyClient.myPlayerHash
+            };
+            studyClient.SendAction(action);
+        }
+        else
+        {
+            // Send zero movement to stop the server player
+            Action stopAction = new Action
+            {
+                player = studyClient.myPlayerId,
+                action_type = "movement",
+                action_data = new System.Collections.Generic.List<float> { 0f, 0f },
+                duration = _moveSendInterval,
+                player_hash = studyClient.myPlayerHash
+            };
+            studyClient.SendAction(stopAction);
+        }
     }
 
     private void SendButtonAction(string actionType)
@@ -181,5 +199,40 @@ public class PlayerInputController : MonoBehaviour
         };
         studyClient.SendAction(action);
         Debug.Log("Sent Interact Action: " + actionData);
+    }
+    
+    private bool IsValidPosition(Vector3 position)
+    {
+        // Basic collision detection for walls and boundaries
+        if (gameManager != null && gameManager.lastState != null)
+        {
+            // Get kitchen boundaries from server state
+            var kitchen = gameManager.lastState.kitchen;
+            if (kitchen != null)
+            {
+                // Check boundaries (with small buffer for player size)
+                float buffer = 0.4f; // Half player width
+                if (position.x < buffer || position.x >= kitchen.width - buffer)
+                    return false;
+                if (position.z < buffer || position.z >= kitchen.height - buffer)  
+                    return false;
+            }
+        }
+        
+        // Check collision with counters and other objects
+        Collider[] colliders = Physics.OverlapSphere(position, 0.3f);
+        foreach (Collider col in colliders)
+        {
+            // Ignore player colliders, only check static objects
+            if (col.gameObject != controlledPlayerGameObject && 
+                (col.gameObject.name.Contains("Counter") || 
+                 col.gameObject.name.Contains("Stove") ||
+                 col.gameObject.name.Contains("Sink")))
+            {
+                return false;
+            }
+        }
+        
+        return true;
     }
 }
