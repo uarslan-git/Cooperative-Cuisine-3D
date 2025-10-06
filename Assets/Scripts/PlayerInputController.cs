@@ -112,6 +112,22 @@ public class PlayerInputController : MonoBehaviour
     private void SendMoveAction(Vector2 move)
     {
         if (studyClient == null) return;
+        
+        // CLIENT-SIDE PREDICTION: Move the player immediately in Unity
+        if (controlledPlayerGameObject != null)
+        {
+            Vector3 movement = new Vector3(move.x * 1.8f * Time.deltaTime, 0, move.y * 1.8f * Time.deltaTime);
+            controlledPlayerGameObject.transform.Translate(movement, Space.World);
+            
+            // Update facing direction
+            if (move != Vector2.zero)
+            {
+                Vector3 facingDirection = new Vector3(move.x, 0, move.y).normalized;
+                controlledPlayerGameObject.transform.rotation = Quaternion.LookRotation(facingDirection);
+            }
+        }
+        
+        // Still send action to server for authoritative state
         Action action = new Action
         {
             player = studyClient.myPlayerId,

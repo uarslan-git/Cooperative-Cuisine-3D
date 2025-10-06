@@ -51,12 +51,16 @@ public class GameManager : MonoBehaviour
             
             if (targetPositions.ContainsKey(playerId) && targetRotations.ContainsKey(playerId))
             {
-                // Use different lerp speeds for local vs remote players
-                float lerpSpeed = (playerId == studyClient.myPlayerId) ? 50f : 40f;
-                
-                // Smoothly move towards target position and rotation
-                playerObj.transform.position = Vector3.Lerp(playerObj.transform.position, targetPositions[playerId], lerpSpeed * Time.deltaTime);
-                playerObj.transform.rotation = Quaternion.Lerp(playerObj.transform.rotation, targetRotations[playerId], lerpSpeed * Time.deltaTime);
+                // Skip position interpolation for local player (they move client-side)
+                // but still interpolate rotation for smooth turning
+                if (playerId == studyClient.myPlayerId) {
+                    // Only interpolate rotation for local player
+                    playerObj.transform.rotation = Quaternion.Lerp(playerObj.transform.rotation, targetRotations[playerId], 50f * Time.deltaTime);
+                } else {
+                    // Full interpolation for remote players
+                    playerObj.transform.position = Vector3.Lerp(playerObj.transform.position, targetPositions[playerId], 40f * Time.deltaTime);
+                    playerObj.transform.rotation = Quaternion.Lerp(playerObj.transform.rotation, targetRotations[playerId], 40f * Time.deltaTime);
+                }
             }
         }
     }
@@ -126,12 +130,17 @@ public class GameManager : MonoBehaviour
         targetPositions[playerState.id] = targetPosition;
         targetRotations[playerState.id] = targetRotation;
         
-        // For local player, also set position more immediately to reduce perceived lag
+        // For local player, only apply server correction if there's significant difference
         if (playerState.id == studyClient.myPlayerId) {
-            // Use a blend of immediate and interpolated positioning for ultra-responsive feel
             Vector3 currentPos = playerObj.transform.position;
-            Vector3 blendedPos = Vector3.Lerp(currentPos, targetPosition, 0.7f); // 70% immediate, 30% smooth
-            playerObj.transform.position = blendedPos;
+            float distanceFromServer = Vector3.Distance(currentPos, targetPosition);
+            
+            // Only correct if server position is significantly different (> 0.5 units)
+            if (distanceFromServer > 0.5f) {
+                // Gradually correct towards server position
+                playerObj.transform.position = Vector3.Lerp(currentPos, targetPosition, 0.1f * Time.deltaTime);
+            }
+            // Otherwise, trust the client-side prediction
         }
         
         // Always ensure the controller is connected for the current player (important for level transitions)
