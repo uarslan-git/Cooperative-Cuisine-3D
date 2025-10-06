@@ -28,5 +28,12 @@ public class NextLevelUI : MonoBehaviour
         }
 
         gameObject.SetActive(true);
+        
+        // Ensure any buttons in this UI are interactable
+        var buttons = GetComponentsInChildren<UnityEngine.UI.Button>();
+        foreach (var button in buttons)
+        {
+            button.interactable = true;
+        }
     }
 }

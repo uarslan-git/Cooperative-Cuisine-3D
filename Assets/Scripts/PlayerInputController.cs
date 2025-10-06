@@ -12,6 +12,9 @@ public class PlayerInputController : MonoBehaviour
     public Camera mainCamera;
 
     private Vector2 _moveInput;
+    private Vector2 _lastSentMoveInput;
+    private float _lastMoveSentTime;
+    private float _moveSendInterval = 0.016f; // Send movement every 16ms (60 FPS) for ultra-smooth network updates
 
     public GameManager gameManager;
 
@@ -56,17 +59,35 @@ public class PlayerInputController : MonoBehaviour
     {
         if (gameManager != null && gameManager.lastState != null && gameManager.lastState.ended)
         {
-            if (playerInput != null && playerInput.actions.FindActionMap("Player").enabled)
-            {
-                playerInput.actions.FindActionMap("Player").Disable();
-                Debug.Log("Player input disabled: Game ended.");
-            }
+            // Don't process movement when game ended, but don't disable input entirely 
+            // (UI buttons still need to work)
             return;
         }
 
-        if (_moveInput != Vector2.zero)
+        // Throttle movement sending and only send when input changes or at regular intervals
+        bool shouldSendMovement = false;
+        
+        // Send if input changed even slightly (ultra-sensitive for immediate response)
+        if (Vector2.Distance(_moveInput, _lastSentMoveInput) > 0.001f)
+        {
+            shouldSendMovement = true;
+        }
+        // Or send at regular intervals if still moving
+        else if (_moveInput != Vector2.zero && Time.time - _lastMoveSentTime >= _moveSendInterval)
+        {
+            shouldSendMovement = true;
+        }
+        // Or send stop command when input becomes zero
+        else if (_moveInput == Vector2.zero && _lastSentMoveInput != Vector2.zero)
+        {
+            shouldSendMovement = true;
+        }
+        
+        if (shouldSendMovement)
         {
             SendMoveAction(_moveInput);
+            _lastSentMoveInput = _moveInput;
+            _lastMoveSentTime = Time.time;
         }
     }
 
@@ -95,12 +116,12 @@ public class PlayerInputController : MonoBehaviour
         {
             player = studyClient.myPlayerId,
             action_type = "movement",
-            action_data = new System.Collections.Generic.List<float> { move.x * 1.2f, move.y * 1.2f },
+            action_data = new System.Collections.Generic.List<float> { move.x * 1.8f, move.y * 1.8f },
             duration = Time.deltaTime,
             player_hash = studyClient.myPlayerHash
         };
         studyClient.SendAction(action);
-        Debug.Log("Sent Move Action: " + move);
+        // Debug.Log("Sent Move Action: " + move); // Commented out to reduce console spam
     }
 
     private void SendButtonAction(string actionType)

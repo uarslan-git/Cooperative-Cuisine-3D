@@ -149,12 +149,19 @@ public class StudyClient : MonoBehaviour
         {
             Debug.Log("Connection open!");
             SendReadyMessage();
-            StartCoroutine(StateUpdateLoop());
-            isStateUpdateLoopRunning = true;
+            // Only start state update loop if not already running
+            if (!isStateUpdateLoopRunning)
+            {
+                StartCoroutine(StateUpdateLoop());
+                isStateUpdateLoopRunning = true;
+            }
         };
 
         websocket.OnError += (e) => { Debug.LogError("Error! " + e); };
-        websocket.OnClose += (e) => { Debug.Log("Connection closed!"); };
+        websocket.OnClose += (e) => { 
+            Debug.Log("Connection closed!"); 
+            isStateUpdateLoopRunning = false; // Reset state when connection closes
+        };
 
         websocket.OnMessage += (bytes) =>
         {
@@ -166,14 +173,14 @@ public class StudyClient : MonoBehaviour
                 if (genericMessage.ContainsKey("players") && genericMessage.ContainsKey("counters"))
                 {
                     var state = JsonConvert.DeserializeObject<StateRepresentation>(message);
-                    Debug.Log($"Received state with ended = {state.ended}");
+                    // Debug.Log($"Received state with ended = {state.ended}"); // Removed to reduce lag
                     if (state != null)
                     {
                         OnStateReceived?.Invoke(state);
 
                         if (state.ended)
                         {
-                            if (nextLevelCanvas != null && !nextLevelCanvas.activeSelf)
+                            if (nextLevelCanvas != null)
                             {
                                 NextLevelUI nextLevelUI = nextLevelCanvas.GetComponent<NextLevelUI>();
                                 if (nextLevelUI != null)
@@ -212,7 +219,7 @@ public class StudyClient : MonoBehaviour
                 else if (genericMessage.ContainsKey("request_type") && genericMessage["request_type"].ToString() == "action")
                 {
                     // Expected response for an action, no need to log as an error
-                    Debug.Log($"Action response: {message}");
+                    // Debug.Log($"Action response: {message}"); // Removed to reduce lag
                 }
                 else
                 {
@@ -280,17 +287,23 @@ public class StudyClient : MonoBehaviour
 
     private async void ReconnectAfterLevelEnd()
     {
+        // Step 1: Close existing WebSocket connection
         if (websocket != null)
         {
             await websocket.Close();
+            websocket = null;
         }
         
-        // Clear previous level state and reset player controller
+        // Step 2: Clear previous level state and reset player controller
         if (gameManager != null)
         {
             gameManager.OnNewLevelStarted();
         }
         
+        // Step 3: Reset connection state
+        isStateUpdateLoopRunning = false;
+        
+        // Step 4: Reconnect following the same sequence as initial connection
         ConnectToGameServer();
     }
 
@@ -341,7 +354,7 @@ public class StudyClient : MonoBehaviour
         while (websocket != null && websocket.State == WebSocketState.Open)
         {
             RequestState();
-            yield return new WaitForSeconds(1f / 5f); // 5 FPS - much more reasonable for a cooking game
+            yield return new WaitForSeconds(1f / 60f); // 60 FPS - ultra-smooth movement
         }
         isStateUpdateLoopRunning = false;
     }

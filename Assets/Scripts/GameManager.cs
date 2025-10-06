@@ -20,12 +20,16 @@ public class GameManager : MonoBehaviour
     private Dictionary<string, GameObject> players = new Dictionary<string, GameObject>();
     private Dictionary<string, Slider> progressBars = new Dictionary<string, Slider>();
     private GameObject progressBarPrefab;
+    
+    // For smooth movement interpolation
+    private Dictionary<string, Vector3> targetPositions = new Dictionary<string, Vector3>();
+    private Dictionary<string, Quaternion> targetRotations = new Dictionary<string, Quaternion>();
+    private float movementLerpSpeed = 25f; // Much faster interpolation for ultra-smooth movement
 
     private bool floorInstantiated = false;
     
     // Track last known object states to avoid unnecessary updates
     private string lastCountersHash = "";
-    private string lastItemsHash = "";
     private float lastScore = -1;
     private float lastTime = -1;
 
@@ -35,6 +39,26 @@ public class GameManager : MonoBehaviour
         progressBarPrefab = Resources.Load<GameObject>("Prefabs/ProgressBar");
         if (progressBarPrefab == null) Debug.LogError("ProgressBar prefab not found in Resources/Prefabs!");
         orderTextPrefab.SetActive(false);
+    }
+
+    void Update()
+    {
+        // Smoothly interpolate player positions between network updates
+        foreach (var playerEntry in players)
+        {
+            string playerId = playerEntry.Key;
+            GameObject playerObj = playerEntry.Value;
+            
+            if (targetPositions.ContainsKey(playerId) && targetRotations.ContainsKey(playerId))
+            {
+                // Use different lerp speeds for local vs remote players
+                float lerpSpeed = (playerId == studyClient.myPlayerId) ? 50f : 40f;
+                
+                // Smoothly move towards target position and rotation
+                playerObj.transform.position = Vector3.Lerp(playerObj.transform.position, targetPositions[playerId], lerpSpeed * Time.deltaTime);
+                playerObj.transform.rotation = Quaternion.Lerp(playerObj.transform.rotation, targetRotations[playerId], lerpSpeed * Time.deltaTime);
+            }
+        }
     }
 
     public void HandleStateReceived(StateRepresentation newState)
@@ -86,26 +110,50 @@ public class GameManager : MonoBehaviour
     private GameObject UpdatePlayer(PlayerState playerState) {
         GameObject playerObj;
         float invertedPlayerZ = (lastState.kitchen.height - 1) - playerState.pos[1];
-        Vector3 position = new Vector3(playerState.pos[0], 0, invertedPlayerZ);
-        Quaternion rotation = Quaternion.LookRotation(new Vector3(playerState.facing_direction[0], 0, -playerState.facing_direction[1]));
+        Vector3 targetPosition = new Vector3(playerState.pos[0], 0, invertedPlayerZ);
+        Quaternion targetRotation = Quaternion.LookRotation(new Vector3(playerState.facing_direction[0], 0, -playerState.facing_direction[1]));
 
         if (!players.ContainsKey(playerState.id)) {
             GameObject playerPrefab = Resources.Load<GameObject>("Prefabs/Player");
-            playerObj = Instantiate(playerPrefab, position, rotation);
+            playerObj = Instantiate(playerPrefab, targetPosition, targetRotation);
             players.Add(playerState.id, playerObj);
         } else {
             playerObj = players[playerState.id];
-            playerObj.transform.position = position;
-            playerObj.transform.rotation = rotation;
+            // Don't set position/rotation directly - use interpolation system instead
+        }
+        
+        // Set target position and rotation for smooth interpolation
+        targetPositions[playerState.id] = targetPosition;
+        targetRotations[playerState.id] = targetRotation;
+        
+        // For local player, also set position more immediately to reduce perceived lag
+        if (playerState.id == studyClient.myPlayerId) {
+            // Use a blend of immediate and interpolated positioning for ultra-responsive feel
+            Vector3 currentPos = playerObj.transform.position;
+            Vector3 blendedPos = Vector3.Lerp(currentPos, targetPosition, 0.7f); // 70% immediate, 30% smooth
+            playerObj.transform.position = blendedPos;
         }
         
         // Always ensure the controller is connected for the current player (important for level transitions)
         if (playerState.id == studyClient.myPlayerId) {
             PlayerInputController pic = GetComponent<PlayerInputController>();
-            if (pic != null && pic.controlledPlayerGameObject != playerObj) {
-                pic.controlledPlayerGameObject = playerObj;
-                Debug.Log($"Player controller reconnected to player {playerState.id} for new level");
+            if (pic != null) {
+                if (pic.controlledPlayerGameObject != playerObj) {
+                    pic.controlledPlayerGameObject = playerObj;
+                    Debug.Log($"Player controller reconnected to player {playerState.id} for new level");
+                }
+                
+                // Ensure player input is enabled after level transition
+                if (pic.playerInput != null && pic.playerInput.actions != null) {
+                    var playerActionMap = pic.playerInput.actions.FindActionMap("Player");
+                    if (playerActionMap != null && !playerActionMap.enabled) {
+                        playerActionMap.Enable();
+                        Debug.Log("Player input re-enabled for new level");
+                    }
+                }
             }
+            
+            // Lerp speed is now handled in the Update method per player
         }
         
         return playerObj;
@@ -209,9 +257,12 @@ public class GameManager : MonoBehaviour
         // Reset all tracking state
         floorInstantiated = false;
         lastCountersHash = "";
-        lastItemsHash = "";
         lastScore = -1;
         lastTime = -1;
+        
+        // Clear interpolation data
+        targetPositions.Clear();
+        targetRotations.Clear();
     }
     
     public void OnNewLevelStarted()
@@ -219,11 +270,8 @@ public class GameManager : MonoBehaviour
         Debug.Log("New level started - clearing previous game state");
         ClearGameObjects();
         
-        // Clear the player controller reference so it gets re-established
-        PlayerInputController pic = GetComponent<PlayerInputController>();
-        if (pic != null) {
-            pic.controlledPlayerGameObject = null;
-        }
+        // Don't clear the player controller reference - let it reconnect naturally
+        // The UpdatePlayer method will handle the reconnection properly
     }
 
     private void UpdatePlayers()
