@@ -54,12 +54,12 @@ public class GameManager : MonoBehaviour
                 // Apply server updates to ALL players - server is now authoritative for everyone
                 if (playerId == studyClient.myPlayerId) {
                     // Local player: smooth interpolation from server position (server-authoritative)
-                    playerObj.transform.position = Vector3.Lerp(playerObj.transform.position, targetPositions[playerId], 20f * Time.deltaTime);
-                    playerObj.transform.rotation = Quaternion.Lerp(playerObj.transform.rotation, targetRotations[playerId], 20f * Time.deltaTime);
+                    playerObj.transform.position = Vector3.Lerp(playerObj.transform.position, targetPositions[playerId], 15f * Time.deltaTime);
+                    playerObj.transform.rotation = Quaternion.Lerp(playerObj.transform.rotation, targetRotations[playerId], 15f * Time.deltaTime);
                 } else {
-                    // Remote players: full interpolation as before
-                    playerObj.transform.position = Vector3.Lerp(playerObj.transform.position, targetPositions[playerId], 40f * Time.deltaTime);
-                    playerObj.transform.rotation = Quaternion.Lerp(playerObj.transform.rotation, targetRotations[playerId], 40f * Time.deltaTime);
+                    // Remote players: slower interpolation for smoother movement
+                    playerObj.transform.position = Vector3.Lerp(playerObj.transform.position, targetPositions[playerId], 5f * Time.deltaTime);
+                    playerObj.transform.rotation = Quaternion.Lerp(playerObj.transform.rotation, targetRotations[playerId], 5f * Time.deltaTime);
                 }
             }
         }
