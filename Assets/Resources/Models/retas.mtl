@@ -1,0 +1,16 @@
+# Created by Metasequoia
+
+newmtl TextureAtlas_1001
+Ka 0.36000 0.36000 0.36000
+Kd 0.48000 0.48000 0.48000
+Ks 0.00000 0.00000 0.00000
+Ns 5.00000
+map_Kd texture_1001.png
+
+newmtl mat1
+Ka 0.10560 0.10560 0.10560
+Kd 0.14080 0.14080 0.14080
+Ks 0.13300 0.13300 0.13300
+Ns 5.00000
+map_Kd texture_100
+

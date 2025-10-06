@@ -353,8 +353,9 @@ public class StudyClient : MonoBehaviour
     {
         while (websocket != null && websocket.State == WebSocketState.Open)
         {
+            // Request state updates at same frequency as our input sending (ultra-responsive)
             RequestState();
-            yield return new WaitForSeconds(1f / 120f); // 120 FPS - ultra-smooth remote player updates
+            yield return null; // Every frame - as smooth as our input system
         }
         isStateUpdateLoopRunning = false;
     }

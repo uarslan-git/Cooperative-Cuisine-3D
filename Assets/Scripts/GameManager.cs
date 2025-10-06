@@ -57,9 +57,17 @@ public class GameManager : MonoBehaviour
                     playerObj.transform.position = Vector3.Lerp(playerObj.transform.position, targetPositions[playerId], 15f * Time.deltaTime);
                     playerObj.transform.rotation = Quaternion.Lerp(playerObj.transform.rotation, targetRotations[playerId], 15f * Time.deltaTime);
                 } else {
-                    // Remote players: slower interpolation for smoother movement
-                    playerObj.transform.position = Vector3.Lerp(playerObj.transform.position, targetPositions[playerId], 5f * Time.deltaTime);
-                    playerObj.transform.rotation = Quaternion.Lerp(playerObj.transform.rotation, targetRotations[playerId], 5f * Time.deltaTime);
+                    // Remote players: Ultra-smooth movement with very fast lerp
+                    float distance = Vector3.Distance(playerObj.transform.position, targetPositions[playerId]);
+                    if (distance > 0.01f) {
+                        // Use MoveTowards for consistent speed regardless of distance
+                        playerObj.transform.position = Vector3.MoveTowards(playerObj.transform.position, targetPositions[playerId], 10f * Time.deltaTime);
+                        playerObj.transform.rotation = Quaternion.RotateTowards(playerObj.transform.rotation, targetRotations[playerId], 720f * Time.deltaTime);
+                    } else {
+                        // Snap to position if very close
+                        playerObj.transform.position = targetPositions[playerId];
+                        playerObj.transform.rotation = targetRotations[playerId];
+                    }
                 }
             }
         }
