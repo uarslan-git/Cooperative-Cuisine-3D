@@ -55,8 +55,17 @@ public class VRInputController : MonoBehaviour
             studyClient = FindFirstObjectByType<StudyClient>();
         }
         
-        // Initialize VR input actions
-        InitializeVRInput();
+        // Only initialize VR input if VR is actually available
+        if (IsVRAvailable())
+        {
+            InitializeVRInput();
+        }
+        else
+        {
+            // Disable this component if VR is not available
+            enabled = false;
+            Debug.Log("VR Input Controller disabled - no VR system detected");
+        }
     }
     
     void OnEnable()
@@ -69,9 +78,15 @@ public class VRInputController : MonoBehaviour
         DisableVRInputActions();
     }
     
+    private bool IsVRAvailable()
+    {
+        // Check if VR is actually running (not just in Unity editor)
+        return UnityEngine.XR.XRSettings.enabled && UnityEngine.XR.XRSettings.loadedDeviceName != "";
+    }
+    
     private void InitializeVRInput()
     {
-        // Create input actions for VR controllers
+        // Create input actions for VR controllers only (don't interfere with keyboard)
         leftThumbstickAction = new InputAction("LeftThumbstick", InputActionType.Value, "<XRController>{LeftHand}/thumbstick");
         rightThumbstickAction = new InputAction("RightThumbstick", InputActionType.Value, "<XRController>{RightHand}/thumbstick");
         
@@ -172,11 +187,10 @@ public class VRInputController : MonoBehaviour
     
     private void SendMoveInputToController(Vector2 moveInput)
     {
-        // Create a mock InputValue to send to the PlayerInputController
+        // Directly set the move input on the PlayerInputController
         if (playerInputController != null)
         {
-            // We'll use reflection or direct access to set the move input
-            // For now, we'll use the public method if it exists, or access the private field
+            // Use reflection to access the private _moveInput field directly
             var moveInputField = typeof(PlayerInputController).GetField("_moveInput", 
                 System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
             

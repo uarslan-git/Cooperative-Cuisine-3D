@@ -7,8 +7,8 @@ public class VRCameraController : MonoBehaviour
 {
     [Header("VR Settings")]
     public Transform playerTransform;
-    public Vector3 cameraOffset = new Vector3(0, 1.7f, 0); // Height offset for VR camera (typical eye height)
-    public bool followPlayerRotation = false; // Whether camera should follow player rotation
+    public Vector3 cameraOffset = new Vector3(0, -0.5f, 1); // Height offset for VR camera (almost at ground level)
+    public bool followPlayerRotation = true; // Whether camera should follow player rotation
     
     [Header("References")]
     public GameManager gameManager;
@@ -64,12 +64,14 @@ public class VRCameraController : MonoBehaviour
     
     private void UpdateCameraPosition()
     {
-        Vector3 targetPosition = playerTransform.position + cameraOffset;
+        // Position camera inside the player (with offset applied in player's local space)
+        Vector3 localOffset = playerTransform.TransformDirection(cameraOffset);
+        Vector3 targetPosition = playerTransform.position + localOffset;
         
         // Smoothly move the camera rig to the target position
         transform.position = Vector3.Lerp(transform.position, targetPosition, 10f * Time.deltaTime);
         
-        // Optionally follow player rotation
+        // Always match player rotation so camera always looks where player is facing
         if (followPlayerRotation)
         {
             Quaternion targetRotation = playerTransform.rotation;
@@ -85,8 +87,15 @@ public class VRCameraController : MonoBehaviour
         playerTransform = newPlayerTransform;
         if (playerTransform != null && isVREnabled)
         {
-            // Immediately snap to new position
-            transform.position = playerTransform.position + cameraOffset;
+            // Immediately snap to new position (using player's local space)
+            Vector3 localOffset = playerTransform.TransformDirection(cameraOffset);
+            transform.position = playerTransform.position + localOffset;
+            
+            // Immediately snap to new rotation
+            if (followPlayerRotation)
+            {
+                transform.rotation = playerTransform.rotation;
+            }
         }
     }
     
