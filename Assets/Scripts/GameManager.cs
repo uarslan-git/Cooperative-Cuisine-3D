@@ -12,6 +12,8 @@ public class GameManager : MonoBehaviour
     public TextMeshProUGUI timeText;
     public Transform ordersContainer;
     public GameObject orderTextPrefab;
+    
+
 
     public Dictionary<string, GameObject> itemObjects = new Dictionary<string, GameObject>();
     public Dictionary<string, GameObject> counters = new Dictionary<string, GameObject>();
@@ -39,6 +41,9 @@ public class GameManager : MonoBehaviour
         progressBarPrefab = Resources.Load<GameObject>("Prefabs/ProgressBar");
         if (progressBarPrefab == null) Debug.LogError("ProgressBar prefab not found in Resources/Prefabs!");
         orderTextPrefab.SetActive(false);
+        
+        // Clear any existing fallback objects from previous runs
+        ClearGameObjects();
     }
 
     void Update()
@@ -118,8 +123,8 @@ public class GameManager : MonoBehaviour
         if (needsRecreate) {
             GameObject itemPrefab = Resources.Load<GameObject>($"Prefabs/{itemState.type}");
             if (itemPrefab == null) {
-                itemPrefab = GameObject.CreatePrimitive(PrimitiveType.Sphere);
-                itemPrefab.name = $"Item_{itemState.type}_Default";
+                Debug.LogError($"Prefab not found for item type: {itemState.type}");
+                return; // Don't create fallback objects
             }
             itemObj = Instantiate(itemPrefab);
             itemObj.name = $"Item_{itemState.type}_{itemState.id}";
@@ -150,9 +155,6 @@ public class GameManager : MonoBehaviour
             itemObj.transform.SetParent(parent, false);
             itemObj.transform.localRotation = Quaternion.identity;
             
-            // Check if this is a base vegetable that needs a plate
-            bool isBaseVegetable = itemState.type == "Lettuce" || itemState.type == "Onion" || itemState.type == "Tomato";
-            
             // Determine item position based on parent type
             if (parent.name == "HoldingSpot") {
                 itemObj.transform.localPosition = Vector3.zero;
@@ -165,38 +167,8 @@ public class GameManager : MonoBehaviour
                     int itemsOnStove = CountItemsOnCounter(parent, itemState.type);
                     float stackHeight = 1f + (itemsOnStove * 0.2f); // Stack them 0.2 units apart
                     itemObj.transform.localPosition = new Vector3(0, stackHeight, 0);
-                } else if (isBaseVegetable) {
-                    // For base vegetables on counters, create a plate underneath
-                    string plateId = $"Plate_for_{parent.name}_{itemState.type}";
-                    GameObject plateObj;
-                    
-                    if (!itemObjects.ContainsKey(plateId)) {
-                        GameObject platePrefab = Resources.Load<GameObject>("Prefabs/Plate");
-                        if (platePrefab == null) {
-                            platePrefab = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
-                            platePrefab.name = "Plate_Default";
-                            // Make the default plate white and flat
-                            Material plateMaterial = new Material(Shader.Find("Standard"));
-                            plateMaterial.color = Color.white;
-                            platePrefab.GetComponent<Renderer>().material = plateMaterial;
-                        }
-                        plateObj = Instantiate(platePrefab);
-                        plateObj.name = $"Plate_{plateId}";
-                        plateObj.transform.localScale = new Vector3(0.4f, 0.05f, 0.4f); // Thinner plate
-                        itemObjects[plateId] = plateObj;
-                        
-                        // Position plate directly on counter surface
-                        plateObj.transform.SetParent(parent, false);
-                        plateObj.transform.localPosition = new Vector3(0, 0.5f + 0.025f, 0); // Counter top + half plate height
-                    } else {
-                        plateObj = itemObjects[plateId];
-                    }
-                    
-                    // Place vegetable directly on top of the plate (not floating)
-                    float plateTop = 0.5f + 0.05f; // Counter height + plate thickness
-                    itemObj.transform.localPosition = new Vector3(0, plateTop + 0.01f, 0); // Small gap to avoid clipping
                 } else {
-                    // Non-vegetable items - place normally on top of counter
+                    // Place all items normally on top of counter
                     itemObj.transform.localPosition = new Vector3(0, 1f, 0);
                 }
             } else {
@@ -247,6 +219,8 @@ public class GameManager : MonoBehaviour
                 if (pic.controlledPlayerGameObject != playerObj) {
                     pic.controlledPlayerGameObject = playerObj;
                     Debug.Log($"Player controller reconnected to player {playerState.id} for new level");
+                    
+
                 }
                 
                 // Ensure player input is enabled after level transition
@@ -275,8 +249,8 @@ public class GameManager : MonoBehaviour
             // Create counter based on type
             GameObject counterPrefab = Resources.Load<GameObject>($"Prefabs/{counterState.type}");
             if (counterPrefab == null) {
-                counterPrefab = GameObject.CreatePrimitive(PrimitiveType.Cube);
-                counterPrefab.name = counterState.type;
+                Debug.LogError($"Prefab not found for counter type: {counterState.type}");
+                return null; // Don't create fallback objects
             }
             counterObj = Instantiate(counterPrefab, position, rotation);
             counterObj.name = $"Counter_{counterState.id}";
@@ -416,6 +390,16 @@ public class GameManager : MonoBehaviour
         }
         progressBars.Clear();
 
+        // Also destroy any objects in the scene that might be fallback cubes
+        GameObject[] allObjects = FindObjectsByType<GameObject>(FindObjectsSortMode.None);
+        foreach (GameObject obj in allObjects)
+        {
+            if (obj.name.Contains("Counter_") || obj.name.Contains("Item_"))
+            {
+                Destroy(obj);
+            }
+        }
+
         // Reset all tracking state
         floorInstantiated = false;
         lastCountersHash = "";
@@ -532,7 +516,7 @@ public class GameManager : MonoBehaviour
             foreach (var counterState in lastState.counters)
             {
                 GameObject counterObj = UpdateCounter(counterState);
-                if (counterState.occupied_by != null)
+                if (counterObj != null && counterState.occupied_by != null)
                 {
                     foreach (ItemState itemState in counterState.occupied_by)
                     {

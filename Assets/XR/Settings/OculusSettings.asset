@@ -1,0 +1,25 @@
+{
+    "m_SerializedVersion": 2,
+    "m_StereoRenderingMode": 1,
+    "m_SharedDepthBuffer": true,
+    "m_DashSupport": true,
+    "m_V2Signing": false,
+    "m_LowOverheadMode": false,
+    "m_ProtectedContext": false,
+    "m_FocusAware": true,
+    "m_OptimizeBufferDiscards": true,
+    "m_PhaseSync": false,
+    "m_SymmetricProjection": true,
+    "m_SubsampledLayout": false,
+    "m_LateLatching": false,
+    "m_LateLatchingDebug": false,
+    "m_EnableTrackingOriginStageMode": false,
+    "m_SpaceWarp": false,
+    "m_TargetQuest": true,
+    "m_TargetQuest2": true,
+    "m_TargetQuestPro": true,
+    "m_TargetQuest3": true,
+    "m_SystemSplashScreen": {
+        "m_FileID": 0
+    }
+}
