@@ -1,6 +1,7 @@
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.XR;
+using UnityEngine.UI;
 
 /// <summary>
 /// Simple VR pointer for interacting with UI elements
@@ -35,7 +36,7 @@ public class VRUIPointer : MonoBehaviour
         vrCamera = Camera.main;
         if (vrCamera == null)
         {
-            vrCamera = FindObjectOfType<Camera>();
+            vrCamera = FindFirstObjectByType<Camera>();
         }
         
         // Setup line renderer if not assigned
@@ -49,7 +50,7 @@ public class VRUIPointer : MonoBehaviour
         }
         
         // Find EventSystem
-        eventSystem = FindObjectOfType<EventSystem>();
+        eventSystem = FindFirstObjectByType<EventSystem>();
         
         Debug.Log("VR UI Pointer initialized");
     }
@@ -83,7 +84,7 @@ public class VRUIPointer : MonoBehaviour
                 // Update line renderer
                 lineRenderer.SetPosition(0, pointer.position);
                 lineRenderer.SetPosition(1, hit.point);
-                lineRenderer.color = hoverColor;
+                lineRenderer.material.color = hoverColor;
             }
         }
         
@@ -92,7 +93,7 @@ public class VRUIPointer : MonoBehaviour
             // No UI hit - draw line to max distance
             lineRenderer.SetPosition(0, pointer.position);
             lineRenderer.SetPosition(1, pointer.position + pointer.forward * maxDistance);
-            lineRenderer.color = normalColor;
+            lineRenderer.material.color = normalColor;
             currentTarget = null;
         }
     }
@@ -129,7 +130,7 @@ public class VRUIPointer : MonoBehaviour
             if (button != null && button.interactable)
             {
                 button.onClick.Invoke();
-                lineRenderer.color = clickColor;
+                lineRenderer.material.color = clickColor;
                 Debug.Log($"VR UI: Clicked button {button.name}");
             }
         }
