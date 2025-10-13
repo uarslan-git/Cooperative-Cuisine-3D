@@ -158,16 +158,27 @@ public class VRCameraController : MonoBehaviour
     
     private void SetupAllCanvasesForVR(Camera vrCamera)
     {
-        Canvas[] canvases = FindObjectsByType<Canvas>(FindObjectsSortMode.None);
+        // Find all Canvas components, including inactive ones
+        Canvas[] canvases = Resources.FindObjectsOfTypeAll<Canvas>();
         
         foreach (Canvas canvas in canvases)
         {
+            // Skip canvases that are part of prefabs (not in scene)
+            if (canvas.gameObject.scene.name == null) continue;
+            
             if (canvas.renderMode == RenderMode.ScreenSpaceOverlay)
             {
                 canvas.renderMode = RenderMode.ScreenSpaceCamera;
                 canvas.worldCamera = vrCamera;
                 canvas.planeDistance = 2f;
-                Debug.Log($"Configured canvas '{canvas.name}' for VR camera");
+                Debug.Log($"Configured canvas '{canvas.name}' for VR camera (Active: {canvas.gameObject.activeInHierarchy})");
+                
+                // Special handling for NextLevelCanvas
+                if (canvas.name == "NextLevelCanvas")
+                {
+                    canvas.planeDistance = 1.5f; // Closer to camera
+                    Debug.Log("Found and configured NextLevelCanvas for VR!");
+                }
             }
         }
     }
@@ -176,19 +187,29 @@ public class VRCameraController : MonoBehaviour
     {
         while (isVREnabled)
         {
-            yield return new UnityEngine.WaitForSeconds(0.5f); // Check every 0.5 seconds
+            yield return new UnityEngine.WaitForSeconds(0.2f); // Check more frequently
             
-            // Check for any new canvases that might have appeared
-            Canvas[] canvases = FindObjectsByType<Canvas>(FindObjectsSortMode.None);
+            // Check for any new or newly activated canvases
+            Canvas[] canvases = Resources.FindObjectsOfTypeAll<Canvas>();
             
             foreach (Canvas canvas in canvases)
             {
+                // Skip canvases that are part of prefabs
+                if (canvas.gameObject.scene.name == null) continue;
+                
                 if (canvas.renderMode == RenderMode.ScreenSpaceOverlay && canvas.worldCamera != vrCamera)
                 {
                     canvas.renderMode = RenderMode.ScreenSpaceCamera;
                     canvas.worldCamera = vrCamera;
                     canvas.planeDistance = 2f;
-                    Debug.Log($"Dynamically configured new canvas '{canvas.name}' for VR camera");
+                    Debug.Log($"Dynamically configured canvas '{canvas.name}' for VR camera (Active: {canvas.gameObject.activeInHierarchy})");
+                    
+                    // Special handling for NextLevelCanvas
+                    if (canvas.name == "NextLevelCanvas")
+                    {
+                        canvas.planeDistance = 1.5f;
+                        Debug.Log("NextLevelCanvas dynamically configured for VR!");
+                    }
                 }
             }
         }

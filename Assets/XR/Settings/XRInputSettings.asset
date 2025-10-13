@@ -1,10 +1,11 @@
 {
-    "m_SerializedVersion": 2,
-    "m_Providers": [
-        {
-            "m_Enabled": true,
-            "m_Id": "Oculus Input Provider",
-            "m_ProviderTypeName": "Unity.XR.Oculus.Input.OculusInput, Unity.XR.Oculus"
-        }
-    ]
+  "m_SerializedVersion": 2,
+  "m_Providers":
+    [
+      {
+        "m_Enabled": true,
+        "m_Id": "Oculus Input Provider",
+        "m_ProviderTypeName": "Unity.XR.Oculus.Input.OculusInput, Unity.XR.Oculus",
+      },
+    ],
 }

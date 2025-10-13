@@ -1,12 +1,13 @@
 {
-    "m_SerializedVersion": 2,
-    "m_Providers": [
-        {
-            "m_Enabled": true,
-            "m_Id": "Oculus Display Provider",
-            "m_ProviderTypeName": "Unity.XR.Oculus.OculusDisplay, Unity.XR.Oculus"
-        }
+  "m_SerializedVersion": 2,
+  "m_Providers":
+    [
+      {
+        "m_Enabled": true,
+        "m_Id": "Oculus Display Provider",
+        "m_ProviderTypeName": "Unity.XR.Oculus.OculusDisplay, Unity.XR.Oculus",
+      },
     ],
-    "m_InitializeOnStart": true,
-    "m_DeinitializeOnStop": true
+  "m_InitializeOnStart": true,
+  "m_DeinitializeOnStop": true,
 }
