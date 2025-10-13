@@ -1,13 +1,33 @@
-{
-  "m_SerializedVersion": 2,
-  "m_Providers":
-    [
-      {
-        "m_Enabled": true,
-        "m_Id": "Oculus Display Provider",
-        "m_ProviderTypeName": "Unity.XR.Oculus.OculusDisplay, Unity.XR.Oculus",
-      },
-    ],
-  "m_InitializeOnStart": true,
-  "m_DeinitializeOnStop": true,
-}
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d2dc886499c26824283350fa532d087d, type: 3}
+  m_Name: XRGeneralSettings
+  m_EditorClassIdentifier: 
+  Keys: 01000000
+  Values:
+  - {fileID: 11400000, guid: ca23f204234a3a94983e5e2c2c389064, type: 2}
+--- !u!114 &11400001
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d236b7d11115f2143951f1e14045df39, type: 3}
+  m_Name: Providers
+  m_EditorClassIdentifier: 
+  m_RequiresSettingsUpdate: 0
+  m_InitializeXRSDKOnStartup: 1
+  m_XRSDKLoaders:
+  - {fileID: 11400000, guid: ca23f204234a3a94983e5e2c2c389064, type: 2}
