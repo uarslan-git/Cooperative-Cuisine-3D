@@ -60,6 +60,38 @@ public class VRCameraController : MonoBehaviour
         // For now, assume VR is enabled if this component exists
         isVREnabled = true;
         Debug.Log("VR Camera Controller enabled");
+        
+        // Ensure UI canvases render to VR camera
+        SetupUIForVR();
+    }
+    
+    private void SetupUIForVR()
+    {
+        // Find all Canvas components in the scene
+        Canvas[] canvases = FindObjectsByType<Canvas>(FindObjectsSortMode.None);
+        
+        foreach (Canvas canvas in canvases)
+        {
+            // If canvas is set to Screen Space - Overlay, change it to Screen Space - Camera
+            if (canvas.renderMode == RenderMode.ScreenSpaceOverlay)
+            {
+                canvas.renderMode = RenderMode.ScreenSpaceCamera;
+                
+                // Set the VR camera as the render camera for this canvas
+                Camera vrCamera = GetComponent<Camera>();
+                if (vrCamera == null)
+                {
+                    vrCamera = GetComponentInChildren<Camera>();
+                }
+                
+                if (vrCamera != null)
+                {
+                    canvas.worldCamera = vrCamera;
+                    canvas.planeDistance = 2f; // Place UI 2 meters in front of camera
+                    Debug.Log($"Set VR camera for canvas: {canvas.name}");
+                }
+            }
+        }
     }
     
     private void UpdateCameraPosition()
@@ -106,5 +138,59 @@ public class VRCameraController : MonoBehaviour
     {
         isVREnabled = enable;
         Debug.Log($"VR Camera Controller {(enable ? "Enabled" : "Disabled")}");
+        
+        if (enable)
+        {
+            SetupUIForVR();
+        }
+    }
+    
+    /// <summary>
+    /// Call this after VR rig is created to setup UI rendering
+    /// </summary>
+    public void SetupVRUI(Camera vrCamera)
+    {
+        SetupAllCanvasesForVR(vrCamera);
+        
+        // Start a coroutine to periodically check for new canvases
+        StartCoroutine(MonitorForNewCanvases(vrCamera));
+    }
+    
+    private void SetupAllCanvasesForVR(Camera vrCamera)
+    {
+        Canvas[] canvases = FindObjectsByType<Canvas>(FindObjectsSortMode.None);
+        
+        foreach (Canvas canvas in canvases)
+        {
+            if (canvas.renderMode == RenderMode.ScreenSpaceOverlay)
+            {
+                canvas.renderMode = RenderMode.ScreenSpaceCamera;
+                canvas.worldCamera = vrCamera;
+                canvas.planeDistance = 2f;
+                Debug.Log($"Configured canvas '{canvas.name}' for VR camera");
+            }
+        }
+    }
+    
+    private System.Collections.IEnumerator MonitorForNewCanvases(Camera vrCamera)
+    {
+        while (isVREnabled)
+        {
+            yield return new UnityEngine.WaitForSeconds(0.5f); // Check every 0.5 seconds
+            
+            // Check for any new canvases that might have appeared
+            Canvas[] canvases = FindObjectsByType<Canvas>(FindObjectsSortMode.None);
+            
+            foreach (Canvas canvas in canvases)
+            {
+                if (canvas.renderMode == RenderMode.ScreenSpaceOverlay && canvas.worldCamera != vrCamera)
+                {
+                    canvas.renderMode = RenderMode.ScreenSpaceCamera;
+                    canvas.worldCamera = vrCamera;
+                    canvas.planeDistance = 2f;
+                    Debug.Log($"Dynamically configured new canvas '{canvas.name}' for VR camera");
+                }
+            }
+        }
     }
 }

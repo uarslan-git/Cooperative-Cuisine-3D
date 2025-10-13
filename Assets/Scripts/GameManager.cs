@@ -56,23 +56,15 @@ public class GameManager : MonoBehaviour
             
             if (targetPositions.ContainsKey(playerId) && targetRotations.ContainsKey(playerId))
             {
-                // Apply server updates to ALL players - server is now authoritative for everyone
+                // Apply smooth interpolation to ALL players for consistent movement
                 if (playerId == studyClient.myPlayerId) {
                     // Local player: smooth interpolation from server position (server-authoritative)
                     playerObj.transform.position = Vector3.Lerp(playerObj.transform.position, targetPositions[playerId], 15f * Time.deltaTime);
                     playerObj.transform.rotation = Quaternion.Lerp(playerObj.transform.rotation, targetRotations[playerId], 15f * Time.deltaTime);
                 } else {
-                    // Remote players: Ultra-smooth movement with very fast lerp
-                    float distance = Vector3.Distance(playerObj.transform.position, targetPositions[playerId]);
-                    if (distance > 0.01f) {
-                        // Use MoveTowards for consistent speed regardless of distance
-                        playerObj.transform.position = Vector3.MoveTowards(playerObj.transform.position, targetPositions[playerId], 10f * Time.deltaTime);
-                        playerObj.transform.rotation = Quaternion.RotateTowards(playerObj.transform.rotation, targetRotations[playerId], 720f * Time.deltaTime);
-                    } else {
-                        // Snap to position if very close
-                        playerObj.transform.position = targetPositions[playerId];
-                        playerObj.transform.rotation = targetRotations[playerId];
-                    }
+                    // Remote players: Same smooth interpolation as local player
+                    playerObj.transform.position = Vector3.Lerp(playerObj.transform.position, targetPositions[playerId], 15f * Time.deltaTime);
+                    playerObj.transform.rotation = Quaternion.Lerp(playerObj.transform.rotation, targetRotations[playerId], 15f * Time.deltaTime);
                 }
             }
         }

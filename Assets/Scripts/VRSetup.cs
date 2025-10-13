@@ -79,6 +79,12 @@ public class VRSetup : MonoBehaviour
         // Configure components
         ConfigureVRComponents();
         
+        // Setup UI for VR after camera is ready
+        if (cameraController != null && vrCamera != null)
+        {
+            cameraController.SetupVRUI(vrCamera);
+        }
+        
         Debug.Log("VR Rig created successfully!");
     }
     
