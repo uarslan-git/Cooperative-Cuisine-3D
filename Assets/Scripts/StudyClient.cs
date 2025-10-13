@@ -12,7 +12,7 @@ using System.Collections.Concurrent;
 
 public class StudyClient : MonoBehaviour
 {
-    public string studyHost = "0ddfd79c42e9.ngrok-free.app"; //Remove https:// prefix for Unity networking
+    public string studyHost = "682e89727181.ngrok-free.app"; //Remove https:// prefix for Unity networking
     public int studyPort = 80; //80 for ngrok, 8080 for local testing
     public string participantId;
     public int numPlayers = 2;
