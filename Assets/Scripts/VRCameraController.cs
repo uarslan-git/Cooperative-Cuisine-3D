@@ -43,7 +43,8 @@ public class VRCameraController : MonoBehaviour
         {
             if (playerInputController != null && playerInputController.controlledPlayerGameObject != null)
             {
-                playerTransform = playerInputController.controlledPlayerGameObject.transform;
+                SetPlayerTransform(playerInputController.controlledPlayerGameObject.transform);
+                Debug.Log("VR Camera Controller found controlled player GameObject");
             }
         }
         

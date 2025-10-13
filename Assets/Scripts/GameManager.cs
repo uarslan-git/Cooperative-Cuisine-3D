@@ -220,7 +220,12 @@ public class GameManager : MonoBehaviour
                     pic.controlledPlayerGameObject = playerObj;
                     Debug.Log($"Player controller reconnected to player {playerState.id} for new level");
                     
-
+                    // Notify VR Camera Controller about player change
+                    VRCameraController vrCameraController = FindFirstObjectByType<VRCameraController>();
+                    if (vrCameraController != null) {
+                        vrCameraController.SetPlayerTransform(playerObj.transform);
+                        Debug.Log("VR Camera Controller updated with new player transform");
+                    }
                 }
                 
                 // Ensure player input is enabled after level transition

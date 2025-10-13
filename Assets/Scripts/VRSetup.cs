@@ -119,6 +119,13 @@ public class VRSetup : MonoBehaviour
         {
             cameraController.gameManager = gameManager;
             cameraController.playerInputController = playerInputController;
+            
+            // Try to set initial player transform if available
+            if (playerInputController != null && playerInputController.controlledPlayerGameObject != null)
+            {
+                cameraController.SetPlayerTransform(playerInputController.controlledPlayerGameObject.transform);
+                Debug.Log("VR Camera Controller initialized with current controlled player");
+            }
         }
         
         // Configure VR Input Controller
