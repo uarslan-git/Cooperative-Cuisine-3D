@@ -31,17 +31,7 @@ public class StudyClient : MonoBehaviour
     
     void Start()
     {
-        // Ensure there is a camera in the scene
-        if (Camera.main == null)
-        {
-            Debug.LogWarning("No main camera found. Creating a default camera.");
-            GameObject cameraObj = new GameObject("Main Camera");
-            cameraObj.AddComponent<Camera>();
-            cameraObj.tag = "MainCamera";
-            cameraObj.transform.position = new Vector3(6, 15, -2);
-            cameraObj.transform.rotation = Quaternion.Euler(60, 0, 0);
-        }
-
+        // Don't create fallback camera in VR - let VR system handle cameras
         if (nextLevelCanvas != null)
         {
             nextLevelCanvas.SetActive(false);
@@ -55,7 +45,9 @@ public class StudyClient : MonoBehaviour
         }
 
         participantId = Guid.NewGuid().ToString();
-        StartCoroutine(StartStudy());
+        
+        // Don't automatically start - let VRMainMenu handle this
+        // StartCoroutine(StartStudy());
     }
 
     void Update()
