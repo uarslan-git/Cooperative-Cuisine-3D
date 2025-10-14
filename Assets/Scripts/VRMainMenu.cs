@@ -17,7 +17,7 @@ public class VRMainMenu : MonoBehaviour
     public GameObject menuPanel;
     
     [Header("Connection Settings")]
-    public string defaultServerUrl = "682e89727181.ngrok-free.app";
+    public string defaultServerUrl = "4105ef3c663f.ngrok-free.app";
     
     private StudyClient studyClient;
     private bool isConnecting = false;
@@ -128,7 +128,7 @@ public class VRMainMenu : MonoBehaviour
                 UpdateStatus("Connected! Starting game...", Color.green);
                 yield return new WaitForSeconds(2f);
                 
-                // Hide the menu
+                // Hide the VR main menu
                 if (menuPanel != null)
                 {
                     menuPanel.SetActive(false);
@@ -137,6 +137,9 @@ public class VRMainMenu : MonoBehaviour
                 {
                     gameObject.SetActive(false);
                 }
+                
+                // Setup VR camera to follow player
+                SetupVRCameraForGame();
                 
                 isConnecting = false;
                 yield break;
@@ -164,6 +167,53 @@ public class VRMainMenu : MonoBehaviour
         }
         
         Debug.Log($"VR Menu Status: {message}");
+    }
+    
+    private void SetupVRCameraForGame()
+    {
+        Debug.Log("Setting up VR camera for game...");
+        
+        // Find the XR Rig in the scene
+        GameObject xrRig = GameObject.Find("XR Rig") ?? GameObject.Find("XR Origin") ?? GameObject.Find("Camera Rig");
+        
+        if (xrRig != null)
+        {
+            // Get the VR camera follower component or add one
+            VRCameraFollower follower = xrRig.GetComponent<VRCameraFollower>();
+            if (follower == null)
+            {
+                follower = xrRig.AddComponent<VRCameraFollower>();
+            }
+            
+            // Enable camera following
+            follower.EnablePlayerFollowing();
+            Debug.Log("VR camera following enabled");
+        }
+        else
+        {
+            Debug.LogWarning("Could not find XR Rig to setup camera following");
+        }
+        
+        // Enable game UI canvases
+        EnableGameUI();
+    }
+    
+    private void EnableGameUI()
+    {
+        // Find and enable game canvases
+        Canvas[] allCanvases = FindObjectsByType<Canvas>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+        
+        foreach (Canvas canvas in allCanvases)
+        {
+            // Enable canvases that are not the VR main menu
+            if (canvas.name.ToLower().Contains("game") || 
+                canvas.name.ToLower().Contains("ui") ||
+                canvas.name.ToLower().Contains("nextlevel"))
+            {
+                canvas.gameObject.SetActive(true);
+                Debug.Log($"Enabled game canvas: {canvas.name}");
+            }
+        }
     }
     
     public void OnServerUrlChanged()

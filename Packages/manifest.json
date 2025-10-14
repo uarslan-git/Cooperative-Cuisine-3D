@@ -2,7 +2,7 @@
   "dependencies": {
     "com.endel.nativewebsocket": "https://github.com/endel/NativeWebSocket.git#upm",
     "com.meta.xr.sdk.core": "71.0.0",
-    "com.meta.xr.sdk.interaction": "71.0.0",
+    "com.meta.xr.sdk.interaction": "78.0.0",
     "com.meta.xr.sdk.platform": "71.0.0",
     "com.unity.ai.assistant": "1.0.0-pre.12",
     "com.unity.ai.generators": "1.0.0-pre.20",
@@ -20,6 +20,8 @@
     "com.unity.toolchain.linux-x86_64": "2.0.10",
     "com.unity.ugui": "2.0.0",
     "com.unity.visualscripting": "1.9.7",
+    "com.unity.xr.hands": "1.5.1",
+    "com.unity.xr.interaction.toolkit": "3.2.1",
     "com.unity.xr.management": "4.5.2",
     "com.unity.xr.openxr": "1.15.1",
     "com.unity.modules.accessibility": "1.0.0",

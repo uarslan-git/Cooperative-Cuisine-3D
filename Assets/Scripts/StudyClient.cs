@@ -12,8 +12,8 @@ using System.Collections.Concurrent;
 
 public class StudyClient : MonoBehaviour
 {
-    public string studyHost = "682e89727181.ngrok-free.app"; //Remove https:// prefix for Unity networking
-    public int studyPort = 80; //80 for ngrok, 8080 for local testing
+    public string studyHost = ""; // Will be set by VRMainMenu
+    public int studyPort = 443; //443 for HTTPS ngrok, 8080 for local testing
     public string participantId;
     public int numPlayers = 2;
     public string myPlayerId;
@@ -78,9 +78,13 @@ public class StudyClient : MonoBehaviour
 
     public IEnumerator StartStudy()
     {
-        string url = $"http://{studyHost}:{studyPort}/start_study/{participantId}/{numPlayers}";
+        // string url = $"http://{studyHost}:{studyPort}/start_study/{participantId}/{numPlayers}";
+        string url = $"https://{studyHost}/start_study/{participantId}/{numPlayers}";
         using (UnityWebRequest webRequest = UnityWebRequest.Post(url, new WWWForm()))
         {
+            // Add ngrok headers
+            webRequest.SetRequestHeader("ngrok-skip-browser-warning", "true");
+            webRequest.SetRequestHeader("User-Agent", "Unity-Game-Client");
             yield return webRequest.SendWebRequest();
             if (webRequest.result == UnityWebRequest.Result.ConnectionError || webRequest.result == UnityWebRequest.Result.ProtocolError)
             {
@@ -97,9 +101,12 @@ public class StudyClient : MonoBehaviour
 
     IEnumerator GetGameConnection()
     {
-        string url = $"http://{studyHost}:{studyPort}/get_game_connection/{participantId}";
+        string url = $"https://{studyHost}/get_game_connection/{participantId}";
         using (UnityWebRequest webRequest = UnityWebRequest.Post(url, new WWWForm()))
         {
+            // Add ngrok headers
+            webRequest.SetRequestHeader("ngrok-skip-browser-warning", "true");
+            webRequest.SetRequestHeader("User-Agent", "Unity-Game-Client");
             yield return webRequest.SendWebRequest();
             if (webRequest.result == UnityWebRequest.Result.ConnectionError || webRequest.result == UnityWebRequest.Result.ProtocolError)
             {
@@ -235,9 +242,12 @@ public class StudyClient : MonoBehaviour
     private IEnumerator RequestNextLevel()
     {
         // First, notify the server that this player is done
-        string levelDoneUrl = $"http://{studyHost}:{studyPort}/level_done/{participantId}";
+        string levelDoneUrl = $"https://{studyHost}/level_done/{participantId}";
         using (UnityWebRequest webRequest = UnityWebRequest.Post(levelDoneUrl, new WWWForm()))
         {
+            // Add ngrok headers
+            webRequest.SetRequestHeader("ngrok-skip-browser-warning", "true");
+            webRequest.SetRequestHeader("User-Agent", "Unity-Game-Client");
             yield return webRequest.SendWebRequest();
             if (webRequest.result != UnityWebRequest.Result.Success)
             {
@@ -248,9 +258,12 @@ public class StudyClient : MonoBehaviour
         }
 
         // Now, get the connection for the *next* level
-        string gameConnectionUrl = $"http://{studyHost}:{studyPort}/get_game_connection/{participantId}";
+        string gameConnectionUrl = $"https://{studyHost}/get_game_connection/{participantId}";
         using (UnityWebRequest webRequest = UnityWebRequest.Post(gameConnectionUrl, new WWWForm()))
         {
+            // Add ngrok headers
+            webRequest.SetRequestHeader("ngrok-skip-browser-warning", "true");
+            webRequest.SetRequestHeader("User-Agent", "Unity-Game-Client");
             // This might take time as the server waits for other players
             Debug.Log("Waiting for other players to finish...");
             yield return webRequest.SendWebRequest();
