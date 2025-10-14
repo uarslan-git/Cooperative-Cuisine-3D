@@ -2214,7 +2214,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 1d5e53a697967fa4885aa0f835ca0a73, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  studyHost: 
+  studyHost: 4105ef3c663f.ngrok-free.app
   studyPort: 0
   participantId: 
   numPlayers: 1
@@ -13560,7 +13560,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 1717954561962503725, guid: f6336ac4ac8b4d34bc5072418cdc62a0, type: 3}
       propertyPath: m_IsActive
-      value: 0
+      value: 1
       objectReference: {fileID: 0}
     - target: {fileID: 1717954561962503726, guid: f6336ac4ac8b4d34bc5072418cdc62a0, type: 3}
       propertyPath: m_RootOrder
@@ -14597,6 +14597,17 @@ Transform:
   m_Children: []
   m_Father: {fileID: 1717468581}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1527897017 stripped
+MonoBehaviour:
+  m_CorrespondingSourceObject: {fileID: 732877344778758184, guid: fd28f23af44f73f4a95e33435872ad15, type: 3}
+  m_PrefabInstance: {fileID: 165281008}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4e29b1a8efbd4b44bb3f3716e73f07ff, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
 --- !u!1 &1528781448
 GameObject:
   m_ObjectHideFlags: 0
@@ -16285,7 +16296,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!114 &1770415835
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -17607,11 +17618,11 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::VRMainMenu
   serverUrlInputField: {fileID: 476427104}
-  connectButton: {fileID: 845719445}
+  connectButton: {fileID: 1527897017}
   statusText: {fileID: 207147541}
   titleText: {fileID: 1375737369}
   menuPanel: {fileID: 773190229}
-  defaultServerUrl: 4105ef3c663f.ngrok-free.app
+  defaultServerUrl: https://4105ef3c663f.ngrok-free.app
 --- !u!114 &1964602100
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -19384,12 +19395,12 @@ SceneRoots:
   - {fileID: 183303085}
   - {fileID: 771462414}
   - {fileID: 1909292727}
-  - {fileID: 1770415839}
   - {fileID: 1964602103}
+  - {fileID: 1770415839}
+  - {fileID: 1349426744}
   - {fileID: 677316547}
   - {fileID: 669831086}
   - {fileID: 165281008}
-  - {fileID: 1349426744}
   - {fileID: 1886867078}
   - {fileID: 237778017}
   - {fileID: 706211909}

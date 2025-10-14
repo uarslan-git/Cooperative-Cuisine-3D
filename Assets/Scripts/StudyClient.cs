@@ -79,7 +79,7 @@ public class StudyClient : MonoBehaviour
     public IEnumerator StartStudy()
     {
         // string url = $"http://{studyHost}:{studyPort}/start_study/{participantId}/{numPlayers}";
-        string url = $"https://{studyHost}/start_study/{participantId}/{numPlayers}";
+        string url = $"{studyHost}/start_study/{participantId}/{numPlayers}";
         using (UnityWebRequest webRequest = UnityWebRequest.Post(url, new WWWForm()))
         {
             // Add ngrok headers
@@ -101,7 +101,7 @@ public class StudyClient : MonoBehaviour
 
     IEnumerator GetGameConnection()
     {
-        string url = $"https://{studyHost}/get_game_connection/{participantId}";
+        string url = $"{studyHost}/get_game_connection/{participantId}";
         using (UnityWebRequest webRequest = UnityWebRequest.Post(url, new WWWForm()))
         {
             // Add ngrok headers
@@ -242,7 +242,7 @@ public class StudyClient : MonoBehaviour
     private IEnumerator RequestNextLevel()
     {
         // First, notify the server that this player is done
-        string levelDoneUrl = $"https://{studyHost}/level_done/{participantId}";
+        string levelDoneUrl = $"{studyHost}/level_done/{participantId}";
         using (UnityWebRequest webRequest = UnityWebRequest.Post(levelDoneUrl, new WWWForm()))
         {
             // Add ngrok headers
@@ -258,7 +258,7 @@ public class StudyClient : MonoBehaviour
         }
 
         // Now, get the connection for the *next* level
-        string gameConnectionUrl = $"https://{studyHost}/get_game_connection/{participantId}";
+        string gameConnectionUrl = $"{studyHost}/get_game_connection/{participantId}";
         using (UnityWebRequest webRequest = UnityWebRequest.Post(gameConnectionUrl, new WWWForm()))
         {
             // Add ngrok headers
