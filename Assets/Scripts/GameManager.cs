@@ -134,12 +134,17 @@ public class GameManager : MonoBehaviour
         {
             itemObj.transform.localScale = new Vector3(0.1f, 0.1f, 0.1f); // Consistent size for food items
         }
-        else if (itemState.type == "Onion" || itemState.type == "ChoppedOnion"){
+        else if (itemState.type == "Onion" || itemState.type == "ChoppedOnion")
+        {
             itemObj.transform.localScale = new Vector3(0.25f, 0.25f, 0.25f); // Consistent size for food items
         }
         else if (itemState.type == "Lettuce" || itemState.type == "ChoppedLettuce")
         {
             itemObj.transform.localScale = new Vector3(0.05f, 0.05f, 0.05f); // Same size as other vegetables
+        }
+        else if (itemState.type == "Plate")
+        {
+            itemObj.transform.localScale = new Vector3(2.0f, 0.1f, 2.0f); // Bigger, flatter plates from server state
         }
         else
         {
@@ -183,7 +188,7 @@ public class GameManager : MonoBehaviour
                         }
                         plateObj = Instantiate(platePrefab);
                         plateObj.name = $"Plate_{plateId}";
-                        plateObj.transform.localScale = new Vector3(0.4f, 0.05f, 0.4f); // Thinner plate
+                        plateObj.transform.localScale = new Vector3(1.8f, 1.05f, 1.8f); // Bigger plate for better visibility
                         itemObjects[plateId] = plateObj;
                         
                         // Position plate directly on counter surface
