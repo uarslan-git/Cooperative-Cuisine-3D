@@ -78,8 +78,8 @@ public class StudyClient : MonoBehaviour
 
     public IEnumerator StartStudy()
     {
-        // string url = $"http://{studyHost}:{studyPort}/start_study/{participantId}/{numPlayers}";
-        string url = $"{studyHost}/start_study/{participantId}/{numPlayers}";
+        string url = $"http://{studyHost}:{studyPort}/start_study/{participantId}/{numPlayers}";
+        // string url = $"{studyHost}/start_study/{participantId}/{numPlayers}";
         using (UnityWebRequest webRequest = UnityWebRequest.Post(url, new WWWForm()))
         {
             // Add ngrok headers
