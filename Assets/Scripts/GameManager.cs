@@ -123,26 +123,25 @@ public class GameManager : MonoBehaviour
             }
             itemObj = Instantiate(itemPrefab);
             itemObj.name = $"Item_{itemState.type}_{itemState.id}";
-            
-            // Ensure consistent sizing for all items (especially food items)
-            if (itemState.type == "Tomato" || itemState.type == "Onion" || 
-                itemState.type == "ChoppedTomato" || itemState.type == "ChoppedOnion" || itemState.type == "ChoppedLettuce")
-            {
-                itemObj.transform.localScale = new Vector3(0.3f, 0.3f, 0.3f); // Smaller for most food items
-            }
-            else if (itemState.type == "Lettuce")
-            {
-                itemObj.transform.localScale = new Vector3(0.05f, 0.05f, 0.05f); // Extra small for lettuce
-            }
-            else
-            {
-                itemObj.transform.localScale = new Vector3(0.5f, 0.5f, 0.5f); // Default size for other items
-            }
-            
             itemObjects[itemState.id] = itemObj;
         } else {
             // Get existing item object if not recreating
             itemObj = itemObjects[itemState.id];
+        }
+
+        // Ensure consistent sizing for all items (especially food items) - apply every time
+        if (itemState.type == "Tomato" || itemState.type == "Onion" || 
+            itemState.type == "ChoppedTomato" || itemState.type == "ChoppedOnion" || itemState.type == "ChoppedLettuce")
+        {
+            itemObj.transform.localScale = new Vector3(0.3f, 0.3f, 0.3f); // Consistent size for food items
+        }
+        else if (itemState.type == "Lettuce")
+        {
+            itemObj.transform.localScale = new Vector3(0.3f, 0.3f, 0.3f); // Same size as other vegetables
+        }
+        else
+        {
+            itemObj.transform.localScale = new Vector3(0.5f, 0.5f, 0.5f); // Default size for other items
         }
 
         if (itemObj.transform.parent != parent)
