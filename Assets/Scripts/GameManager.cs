@@ -119,10 +119,23 @@ public class GameManager : MonoBehaviour
         
         if (needsRecreate) {
             GameObject itemPrefab = Resources.Load<GameObject>($"Prefabs/{itemState.type}");
+            
+            // Check if this is a base vegetable - don't create white cubes for them
+            bool isBaseVegetable = itemState.type == "Lettuce" || itemState.type == "Onion" || itemState.type == "Tomato" || itemState.type == "Salad";
+            
             if (itemPrefab == null) {
-                itemPrefab = GameObject.CreatePrimitive(PrimitiveType.Sphere);
-                itemPrefab.name = $"Item_{itemState.type}_Default";
+                if (isBaseVegetable) {
+                    Debug.LogError($"CRITICAL: Prefab not found for base vegetable {itemState.type} - SKIPPING creation of white cube!");
+                    return; // Don't create any object for vegetables without prefabs
+                } else {
+                    Debug.LogWarning($"Prefab not found for {itemState.type}, creating default sphere");
+                    itemPrefab = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+                    itemPrefab.name = $"Item_{itemState.type}_Default";
+                }
+            } else {
+                Debug.Log($"Successfully loaded prefab for {itemState.type}");
             }
+            
             itemObj = Instantiate(itemPrefab);
             itemObj.name = $"Item_{itemState.type}_{itemState.id}";
             itemObjects[itemState.id] = itemObj;
@@ -174,8 +187,8 @@ public class GameManager : MonoBehaviour
             itemObj.transform.SetParent(parent, false);
             itemObj.transform.localRotation = Quaternion.identity;
             
-            // Check if this is a base vegetable that needs a plate
-            bool isBaseVegetable = itemState.type == "Lettuce" || itemState.type == "Onion" || itemState.type == "Tomato";
+            // Check if this is a base vegetable that should be placed directly on surfaces
+            bool isBaseVegetable = itemState.type == "Lettuce" || itemState.type == "Onion" || itemState.type == "Tomato" || itemState.type == "Salad";
             
             // Determine item position based on parent type
             if (parent.name == "HoldingSpot") {
@@ -206,9 +219,10 @@ public class GameManager : MonoBehaviour
                     float stackHeight = surfaceHeight + (itemsOnStove * 0.2f); // Stack them 0.2 units apart
                     itemObj.transform.localPosition = new Vector3(0, stackHeight, 0); // Centered stacking
                 } else if (isBaseVegetable) {
-                    // For base vegetables on counters, place them directly on the counter surface
+                    // For base vegetables on counters, place them directly on the counter surface - NO PLATES
                     float vegetableCounterHeight = GetCounterSurfaceHeight(parent);
                     itemObj.transform.localPosition = new Vector3(0, vegetableCounterHeight + 0.1f, 0); // Directly on counter surface
+                    Debug.Log($"Placing base vegetable {itemState.type} directly on counter at height {vegetableCounterHeight + 0.1f}");
                 } else {
                     // General item positioning based on counter type and item type
                     float itemHeight = GetItemHeight(itemState, parent);
@@ -772,8 +786,16 @@ public class GameManager : MonoBehaviour
                 else
                 {
                     GameObject itemPrefab = Resources.Load<GameObject>($"Prefabs/{contentItem.type}");
+                    
+                    // Check if this is a base vegetable - don't create white cubes for them
+                    bool isBaseVegetable = contentItem.type == "Lettuce" || contentItem.type == "Onion" || contentItem.type == "Tomato" || contentItem.type == "Salad";
+                    
                     if (itemPrefab == null)
                     {
+                        if (isBaseVegetable) {
+                            Debug.LogError($"CRITICAL: Prefab not found for base vegetable {contentItem.type} in cooking equipment - SKIPPING creation!");
+                            continue; // Skip this vegetable instead of creating white cube
+                        }
                         itemPrefab = GameObject.CreatePrimitive(PrimitiveType.Sphere);
                         itemPrefab.name = $"Item_{contentItem.type}_Default";
                     }
@@ -833,8 +855,16 @@ public class GameManager : MonoBehaviour
             else
             {
                 GameObject itemPrefab = Resources.Load<GameObject>($"Prefabs/{cookingEquipment.content_ready.type}");
+                
+                // Check if this is a base vegetable - don't create white cubes for them
+                bool isBaseVegetable = cookingEquipment.content_ready.type == "Lettuce" || cookingEquipment.content_ready.type == "Onion" || cookingEquipment.content_ready.type == "Tomato" || cookingEquipment.content_ready.type == "Salad";
+                
                 if (itemPrefab == null)
                 {
+                    if (isBaseVegetable) {
+                        Debug.LogError($"CRITICAL: Prefab not found for ready vegetable {cookingEquipment.content_ready.type} - SKIPPING creation!");
+                        return; // Don't create ready item for vegetables without prefabs
+                    }
                     itemPrefab = GameObject.CreatePrimitive(PrimitiveType.Sphere);
                     itemPrefab.name = $"Item_{cookingEquipment.content_ready.type}_Default";
                 }
