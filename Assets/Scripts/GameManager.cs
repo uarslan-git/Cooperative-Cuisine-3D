@@ -136,7 +136,7 @@ public class GameManager : MonoBehaviour
         }
         else if (itemState.type == "Onion" || itemState.type == "ChoppedOnion")
         {
-            itemObj.transform.localScale = new Vector3(0.25f, 0.25f, 0.25f); // Consistent size for food items
+            itemObj.transform.localScale = new Vector3(0.7f, 0.7f, 0.7f); // Consistent size for food items
         }
         else if (itemState.type == "Lettuce" || itemState.type == "ChoppedLettuce")
         {
@@ -144,7 +144,7 @@ public class GameManager : MonoBehaviour
         }
         else if (itemState.type == "Plate")
         {
-            itemObj.transform.localScale = new Vector3(2.0f, 0.1f, 2.0f); // Bigger, flatter plates from server state
+            itemObj.transform.localScale = new Vector3(1.0f, 1.0f, 1.0f); // Bigger, flatter plates from server state
         }
         else
         {
@@ -205,6 +205,36 @@ public class GameManager : MonoBehaviour
                     // Non-vegetable items - place normally on top of counter
                     itemObj.transform.localPosition = new Vector3(0, 1f, 0);
                 }
+            } else if (isBaseVegetable) {
+                // For base vegetables on other surfaces (like CuttingBoard), also create a plate underneath
+                string plateId = $"Plate_for_{parent.name}_{itemState.type}";
+                GameObject plateObj;
+                
+                if (!itemObjects.ContainsKey(plateId)) {
+                    GameObject platePrefab = Resources.Load<GameObject>("Prefabs/Plate");
+                    if (platePrefab == null) {
+                        platePrefab = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+                        platePrefab.name = "Plate_Default";
+                        // Make the default plate white and flat
+                        Material plateMaterial = new Material(Shader.Find("Standard"));
+                        plateMaterial.color = Color.white;
+                        platePrefab.GetComponent<Renderer>().material = plateMaterial;
+                    }
+                    plateObj = Instantiate(platePrefab);
+                    plateObj.name = $"Plate_{plateId}";
+                    plateObj.transform.localScale = new Vector3(1.8f, 1.05f, 1.8f); // Bigger plate for better visibility
+                    itemObjects[plateId] = plateObj;
+                    
+                    // Position plate directly on surface
+                    plateObj.transform.SetParent(parent, false);
+                    plateObj.transform.localPosition = new Vector3(0, 0.5f + 0.025f, 0); // Surface top + half plate height
+                } else {
+                    plateObj = itemObjects[plateId];
+                }
+                
+                // Place vegetable directly on top of the plate (not floating)
+                float plateTop = 0.5f + 0.05f; // Surface height + plate thickness
+                itemObj.transform.localPosition = new Vector3(0, plateTop + 0.01f, 0); // Small gap to avoid clipping
             } else {
                 // Default position for other counter types
                 itemObj.transform.localPosition = new Vector3(0, 1f, 0);
