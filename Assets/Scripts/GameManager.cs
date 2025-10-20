@@ -130,14 +130,16 @@ public class GameManager : MonoBehaviour
         }
 
         // Ensure consistent sizing for all items (especially food items) - apply every time
-        if (itemState.type == "Tomato" || itemState.type == "Onion" || 
-            itemState.type == "ChoppedTomato" || itemState.type == "ChoppedOnion" || itemState.type == "ChoppedLettuce")
+        if (itemState.type == "Tomato" || itemState.type == "ChoppedTomato")
         {
-            itemObj.transform.localScale = new Vector3(0.3f, 0.3f, 0.3f); // Consistent size for food items
+            itemObj.transform.localScale = new Vector3(0.1f, 0.1f, 0.1f); // Consistent size for food items
         }
-        else if (itemState.type == "Lettuce")
+        else if (itemState.type == "Onion" || itemState.type == "ChoppedOnion"){
+            itemObj.transform.localScale = new Vector3(0.25f, 0.25f, 0.25f); // Consistent size for food items
+        }
+        else if (itemState.type == "Lettuce" || itemState.type == "ChoppedLettuce")
         {
-            itemObj.transform.localScale = new Vector3(0.3f, 0.3f, 0.3f); // Same size as other vegetables
+            itemObj.transform.localScale = new Vector3(0.05f, 0.05f, 0.05f); // Same size as other vegetables
         }
         else
         {
