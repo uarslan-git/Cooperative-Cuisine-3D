@@ -117,6 +117,7 @@ public class StudyClient : MonoBehaviour
             {
                 string jsonResponse = webRequest.downloadHandler.text;
                 Debug.Log($"Get Game Connection Response: {jsonResponse}");
+                Debug.Log($"=== FULL LEVEL & PLAYER INFO ===\n{jsonResponse}\n=== END ===");
                 gameConnectionData = JsonConvert.DeserializeObject<GameConnectionData>(jsonResponse);
                 levelInfo = gameConnectionData.level_info;
                 Debug.Log($"Game connection data received for level: {levelInfo.name}");
@@ -267,6 +268,7 @@ public class StudyClient : MonoBehaviour
             {
                 Debug.Log("Received new game connection data.");
                 string jsonResponse = webRequest.downloadHandler.text;
+                Debug.Log($"=== NEXT LEVEL & PLAYER INFO ===\n{jsonResponse}\n=== END ===");
                 gameConnectionData = JsonConvert.DeserializeObject<GameConnectionData>(jsonResponse);
                 levelInfo = gameConnectionData.level_info;
 

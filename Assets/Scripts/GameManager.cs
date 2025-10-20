@@ -77,6 +77,8 @@ public class GameManager : MonoBehaviour
     {
         lastState = newState;
         
+        // Debug: Print the game state (only once per state to avoid spam)
+        
         // Always update players (they move frequently)
         UpdatePlayers();
         
@@ -130,13 +132,21 @@ public class GameManager : MonoBehaviour
         }
 
         // Ensure consistent sizing for all items (especially food items) - apply every time
-        if (itemState.type == "Tomato" || itemState.type == "ChoppedTomato")
+        if (itemState.type == "Tomato")
         {
             itemObj.transform.localScale = new Vector3(0.1f, 0.1f, 0.1f); // Consistent size for food items
         }
-        else if (itemState.type == "Onion" || itemState.type == "ChoppedOnion")
+        else if (itemState.type == "ChoppedTomato")
+        {
+            itemObj.transform.localScale = new Vector3(0.3f, 0.3f, 0.3f); // Consistent size for food items
+        }
+        else if (itemState.type == "Onion")
         {
             itemObj.transform.localScale = new Vector3(0.7f, 0.7f, 0.7f); // Consistent size for food items
+        }
+        else if (itemState.type == "ChoppedOnion")
+        {
+            itemObj.transform.localScale = new Vector3(0.7f, 0.7f, 0.7f); // Slightly smaller for chopped items
         }
         else if (itemState.type == "Lettuce" || itemState.type == "ChoppedLettuce")
         {
@@ -145,6 +155,14 @@ public class GameManager : MonoBehaviour
         else if (itemState.type == "Plate")
         {
             itemObj.transform.localScale = new Vector3(1.0f, 1.0f, 1.0f); // Bigger, flatter plates from server state
+        }
+        else if (itemState.type == "Pot" || itemState.type == "Pan")
+        {
+            itemObj.transform.localScale = new Vector3(0.8f, 0.8f, 0.8f); // Appropriate size for cooking equipment
+        }
+        else if (itemState.category == "ItemCookingEquipment")
+        {
+            itemObj.transform.localScale = new Vector3(0.7f, 0.7f, 0.7f); // General cooking equipment size
         }
         else
         {
@@ -166,78 +184,61 @@ public class GameManager : MonoBehaviour
                 // Check if this counter is a stove for stacking logic
                 string counterType = GetCounterType(parent.name);
                 
-                if (counterType == "Stove" && IsChoppedVegetable(itemState.type)) {
-                    // Stack chopped vegetables on stoves to show quantity
-                    int itemsOnStove = CountItemsOnCounter(parent, itemState.type);
-                    float stackHeight = 1f + (itemsOnStove * 0.2f); // Stack them 0.2 units apart
-                    itemObj.transform.localPosition = new Vector3(0, stackHeight, 0);
-                } else if (isBaseVegetable) {
-                    // For base vegetables on counters, create a plate underneath
-                    string plateId = $"Plate_for_{parent.name}_{itemState.type}";
-                    GameObject plateObj;
+                // Special positioning for cooking equipment (Pot, Pan) on stoves
+                if (counterType == "Stove" && (itemState.type == "Pot" || itemState.type == "Pan" || itemState.category == "ItemCookingEquipment")) {
+                    // Position cooking equipment at center of stove, on top of surface
+                    float surfaceHeight = GetCounterSurfaceHeight(parent);
                     
-                    if (!itemObjects.ContainsKey(plateId)) {
-                        GameObject platePrefab = Resources.Load<GameObject>("Prefabs/Plate");
-                        if (platePrefab == null) {
-                            platePrefab = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
-                            platePrefab.name = "Plate_Default";
-                            // Make the default plate white and flat
-                            Material plateMaterial = new Material(Shader.Find("Standard"));
-                            plateMaterial.color = Color.white;
-                            platePrefab.GetComponent<Renderer>().material = plateMaterial;
-                        }
-                        plateObj = Instantiate(platePrefab);
-                        plateObj.name = $"Plate_{plateId}";
-                        plateObj.transform.localScale = new Vector3(1.8f, 1.05f, 1.8f); // Bigger plate for better visibility
-                        itemObjects[plateId] = plateObj;
-                        
-                        // Position plate directly on counter surface
-                        plateObj.transform.SetParent(parent, false);
-                        plateObj.transform.localPosition = new Vector3(0, 0.5f + 0.025f, 0); // Counter top + half plate height
-                    } else {
-                        plateObj = itemObjects[plateId];
+                    // Special case for Cooktop items - always center at (0,0,0) with height adjustment
+                    if (itemState.type.Contains("Cooktop"))
+                    {
+                        float itemHeight = GetItemHeight(itemState, parent);
+                        itemObj.transform.localPosition = new Vector3(0, itemHeight, 0); // Centered at X=0, Z=0
                     }
-                    
-                    // Place vegetable directly on top of the plate (not floating)
-                    float plateTop = 0.5f + 0.05f; // Counter height + plate thickness
-                    itemObj.transform.localPosition = new Vector3(0, plateTop + 0.01f, 0); // Small gap to avoid clipping
+                    else
+                    {
+                        itemObj.transform.localPosition = new Vector3(0, surfaceHeight, 0); // Centered on stove surface
+                    }
+                } else if (counterType == "Stove" && IsChoppedVegetable(itemState.type)) {
+                    // Stack chopped vegetables on stoves to show quantity - also centered
+                    int itemsOnStove = CountItemsOnCounter(parent, itemState.type);
+                    float surfaceHeight = GetCounterSurfaceHeight(parent);
+                    float stackHeight = surfaceHeight + (itemsOnStove * 0.2f); // Stack them 0.2 units apart
+                    itemObj.transform.localPosition = new Vector3(0, stackHeight, 0); // Centered stacking
+                } else if (isBaseVegetable) {
+                    // For base vegetables on counters, place them directly on the counter surface
+                    float vegetableCounterHeight = GetCounterSurfaceHeight(parent);
+                    itemObj.transform.localPosition = new Vector3(0, vegetableCounterHeight + 0.1f, 0); // Directly on counter surface
                 } else {
-                    // Non-vegetable items - place normally on top of counter
-                    itemObj.transform.localPosition = new Vector3(0, 1f, 0);
+                    // General item positioning based on counter type and item type
+                    float itemHeight = GetItemHeight(itemState, parent);
+                    if (counterType == "Stove") {
+                        // Items on stoves should be centered and at appropriate height
+                        itemObj.transform.localPosition = new Vector3(0, itemHeight, 0);
+                    } else if (counterType == "CuttingBoard") {
+                        // Items on cutting boards should be centered at surface level
+                        itemObj.transform.localPosition = new Vector3(0, itemHeight * 0.6f, 0);
+                    } else {
+                        // Default counter positioning - centered
+                        itemObj.transform.localPosition = new Vector3(0, itemHeight, 0);
+                    }
                 }
             } else if (isBaseVegetable) {
-                // For base vegetables on other surfaces (like CuttingBoard), also create a plate underneath
-                string plateId = $"Plate_for_{parent.name}_{itemState.type}";
-                GameObject plateObj;
-                
-                if (!itemObjects.ContainsKey(plateId)) {
-                    GameObject platePrefab = Resources.Load<GameObject>("Prefabs/Plate");
-                    if (platePrefab == null) {
-                        platePrefab = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
-                        platePrefab.name = "Plate_Default";
-                        // Make the default plate white and flat
-                        Material plateMaterial = new Material(Shader.Find("Standard"));
-                        plateMaterial.color = Color.white;
-                        platePrefab.GetComponent<Renderer>().material = plateMaterial;
-                    }
-                    plateObj = Instantiate(platePrefab);
-                    plateObj.name = $"Plate_{plateId}";
-                    plateObj.transform.localScale = new Vector3(1.8f, 1.05f, 1.8f); // Bigger plate for better visibility
-                    itemObjects[plateId] = plateObj;
-                    
-                    // Position plate directly on surface
-                    plateObj.transform.SetParent(parent, false);
-                    plateObj.transform.localPosition = new Vector3(0, 0.5f + 0.025f, 0); // Surface top + half plate height
-                } else {
-                    plateObj = itemObjects[plateId];
-                }
-                
-                // Place vegetable directly on top of the plate (not floating)
-                float plateTop = 0.5f + 0.05f; // Surface height + plate thickness
-                itemObj.transform.localPosition = new Vector3(0, plateTop + 0.01f, 0); // Small gap to avoid clipping
+                // For base vegetables on other surfaces, place them directly on the surface
+                float vegetableSurfaceHeight = GetCounterSurfaceHeight(parent);
+                itemObj.transform.localPosition = new Vector3(0, vegetableSurfaceHeight + 0.1f, 0); // Directly on surface
             } else {
-                // Default position for other counter types
-                itemObj.transform.localPosition = new Vector3(0, 1f, 0);
+                // Default position for other surface types - all centered with dynamic height adjustment
+                float itemHeight = GetItemHeight(itemState, parent);
+                if (parent.name.Contains("Stove")) {
+                    itemObj.transform.localPosition = new Vector3(0, itemHeight, 0); // Centered on stoves
+                } else if (parent.name.Contains("CuttingBoard")) {
+                    itemObj.transform.localPosition = new Vector3(0, itemHeight * 0.6f, 0); // Centered on cutting boards
+                } else if (parent.name.Contains("Sink")) {
+                    itemObj.transform.localPosition = new Vector3(0, itemHeight * 0.8f, 0); // Centered on sinks
+                } else {
+                    itemObj.transform.localPosition = new Vector3(0, itemHeight, 0); // Centered on default counters
+                }
             }
         }
     }
@@ -304,7 +305,12 @@ public class GameManager : MonoBehaviour
     private GameObject UpdateCounter(CounterState counterState) {
         GameObject counterObj;
         float invertedCounterZ = (lastState.kitchen.height - 1) - counterState.pos[1];
+        // Ensure counters are positioned at exactly the grid positions without any offset
         Vector3 position = new Vector3(counterState.pos[0], 0, invertedCounterZ);
+        
+        // Debug log to check positioning
+        Debug.Log($"Counter {counterState.id} type {counterState.type} at pos ({counterState.pos[0]}, {counterState.pos[1]}) -> Unity pos {position}");
+        
         Quaternion rotation = Quaternion.LookRotation(new Vector3(counterState.orientation[0], 0, -counterState.orientation[1]));
 
         if (!counters.ContainsKey(counterState.id)) {
@@ -317,6 +323,8 @@ public class GameManager : MonoBehaviour
             counterObj = Instantiate(counterPrefab, position, rotation);
             counterObj.name = $"Counter_{counterState.id}";
             
+            // Don't modify counter children positions - let them stay as designed in prefabs
+            
             // Ensure counter has a collider for collision detection
             if (counterObj.GetComponent<Collider>() == null)
             {
@@ -327,6 +335,15 @@ public class GameManager : MonoBehaviour
             counters.Add(counterState.id, counterObj);
         } else {
             counterObj = counters[counterState.id];
+            
+            // Update counter position and rotation if they changed
+            if (counterObj.transform.position != position || counterObj.transform.rotation != rotation)
+            {
+                counterObj.transform.position = position;
+                counterObj.transform.rotation = rotation;
+                
+                // Don't modify children positions when counter moves - they should maintain their relative positions
+            }
         }
         return counterObj;
     }
@@ -529,6 +546,25 @@ public class GameManager : MonoBehaviour
                 foreach (var item in counter.occupied_by)
                 {
                     hashData.Append($":{item.id}:{item.type}:{item.progress_percentage}");
+                    
+                    // Include cooking equipment content in hash
+                    if (item is CookingEquipmentState cookingEquipment)
+                    {
+                        hashData.Append($":content_list_count:{cookingEquipment.content_list?.Count ?? 0}");
+                        if (cookingEquipment.content_list != null)
+                        {
+                            foreach (var contentItem in cookingEquipment.content_list)
+                            {
+                                hashData.Append($":content:{contentItem.id}:{contentItem.type}:{contentItem.progress_percentage}");
+                            }
+                        }
+                        
+                        hashData.Append($":content_ready:{cookingEquipment.content_ready?.id ?? "null"}");
+                        if (cookingEquipment.content_ready != null)
+                        {
+                            hashData.Append($":{cookingEquipment.content_ready.type}");
+                        }
+                    }
                 }
             }
         }
@@ -552,6 +588,13 @@ public class GameManager : MonoBehaviour
                     {
                         activeItemIDs.Add(playerState.holding.id);
                         UpdateItem(playerState.holding, playerObj.transform.Find("HoldingSpot"));
+                        
+                        // Handle CookingEquipmentState held by players
+                        if (playerState.holding is CookingEquipmentState heldCookingEquipment)
+                        {
+                            UpdateCookingEquipment(heldCookingEquipment, playerObj.transform.Find("HoldingSpot"), activeItemIDs, activeProgressIDs);
+                        }
+                        
                         if (playerState.holding.progress_percentage > 0 && playerState.holding.progress_percentage < 100)
                         {
                             activeProgressIDs.Add(playerState.holding.id);
@@ -574,6 +617,13 @@ public class GameManager : MonoBehaviour
                     {
                         activeItemIDs.Add(itemState.id);
                         UpdateItem(itemState, counterObj.transform);
+                        
+                        // Handle CookingEquipmentState (like stoves) with content_list and content_ready
+                        if (itemState is CookingEquipmentState cookingEquipment)
+                        {
+                            UpdateCookingEquipment(cookingEquipment, counterObj.transform, activeItemIDs, activeProgressIDs);
+                        }
+                        
                         if (itemState.progress_percentage > 0 && itemState.progress_percentage < 100)
                         {
                             activeProgressIDs.Add(itemState.id);
@@ -641,5 +691,196 @@ public class GameManager : MonoBehaviour
             }
         }
         return count;
+    }
+    
+    private float GetCounterSurfaceHeight(Transform parent)
+    {
+        // Get the actual height of the counter surface
+        if (parent.name.StartsWith("Counter_"))
+        {
+            Renderer counterRenderer = parent.GetComponent<Renderer>();
+            if (counterRenderer != null)
+            {
+                return counterRenderer.bounds.size.y;
+            }
+        }
+        // Default height for non-counter parents or if no renderer found
+        return 1.0f;
+    }
+    
+    private float GetItemHeight(ItemState itemState, Transform parent)
+    {
+        float baseHeight = GetCounterSurfaceHeight(parent);
+        
+        // Special height adjustments for specific items
+        if (itemState.type.Contains("Cooktop"))
+        {
+            return baseHeight + 0.0f; // Raise cooktop higher
+        }
+        else if (itemState.type == "CuttingBoardOld")
+        {
+            return baseHeight + 0.3f; // Raise cutting board
+        }
+        else if (itemState.type == "Knife")
+        {
+            return baseHeight + 0.4f; // Raise knife
+        }
+        else if (itemState.type == "Plate")
+        {
+            return baseHeight + 1.0f; // Raise plates higher
+        }
+        
+        return baseHeight; // Default height
+    }
+    
+    private void UpdateCookingEquipment(CookingEquipmentState cookingEquipment, Transform parent, HashSet<string> activeItemIDs, HashSet<string> activeProgressIDs)
+    {
+        // Find the cooking equipment GameObject (like a stove)
+        GameObject cookingEquipmentObj = null;
+        if (itemObjects.ContainsKey(cookingEquipment.id))
+        {
+            cookingEquipmentObj = itemObjects[cookingEquipment.id];
+        }
+        
+        if (cookingEquipmentObj == null) return;
+        
+        // Create a container for cooking contents if it doesn't exist
+        Transform contentsContainer = cookingEquipmentObj.transform.Find("CookingContents");
+        if (contentsContainer == null)
+        {
+            GameObject container = new GameObject("CookingContents");
+            container.transform.SetParent(cookingEquipmentObj.transform, false);
+            container.transform.localPosition = new Vector3(0, 0.3f, 0); // Inside the cooking equipment (pot/pan)
+            contentsContainer = container.transform;
+        }
+        
+        // Handle content_list (items currently being cooked)
+        if (cookingEquipment.content_list != null && cookingEquipment.content_list.Count > 0)
+        {
+            for (int i = 0; i < cookingEquipment.content_list.Count; i++)
+            {
+                ItemState contentItem = cookingEquipment.content_list[i];
+                activeItemIDs.Add(contentItem.id);
+                
+                // Create or update the content item
+                GameObject contentObj;
+                if (itemObjects.ContainsKey(contentItem.id))
+                {
+                    contentObj = itemObjects[contentItem.id];
+                    contentObj.SetActive(true);
+                }
+                else
+                {
+                    GameObject itemPrefab = Resources.Load<GameObject>($"Prefabs/{contentItem.type}");
+                    if (itemPrefab == null)
+                    {
+                        itemPrefab = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+                        itemPrefab.name = $"Item_{contentItem.type}_Default";
+                    }
+                    contentObj = Instantiate(itemPrefab);
+                    contentObj.name = $"Item_{contentItem.type}_{contentItem.id}";
+                    itemObjects[contentItem.id] = contentObj;
+                }
+                
+                // Position content items in the cooking equipment
+                contentObj.transform.SetParent(contentsContainer, false);
+                
+                // Stack items vertically in the center of the cooking equipment
+                float stackHeight = i * 0.1f; // Stack items vertically
+                
+                contentObj.transform.localPosition = new Vector3(0, stackHeight, 0); // Centered stacking
+                contentObj.transform.localScale = new Vector3(0.3f, 0.3f, 0.3f); // Smaller size when inside cooking equipment
+                
+                // Show progress if the item is cooking
+                if (contentItem.progress_percentage > 0 && contentItem.progress_percentage < 100)
+                {
+                    activeProgressIDs.Add(contentItem.id);
+                    UpdateProgressBar(contentItem.id, contentObj.transform, contentItem.progress_percentage);
+                }
+            }
+        }
+        else
+        {
+            // No content_list - hide any existing content items for this cooking equipment
+            foreach (Transform child in contentsContainer)
+            {
+                child.gameObject.SetActive(false);
+            }
+        }
+        
+        // Handle content_ready (finished cooked item ready for pickup)
+        if (cookingEquipment.content_ready != null)
+        {
+            activeItemIDs.Add(cookingEquipment.content_ready.id);
+            
+            // Create a "ready" spot on the cooking equipment
+            Transform readySpot = cookingEquipmentObj.transform.Find("ReadySpot");
+            if (readySpot == null)
+            {
+                GameObject readyContainer = new GameObject("ReadySpot");
+                readyContainer.transform.SetParent(cookingEquipmentObj.transform, false);
+                readyContainer.transform.localPosition = new Vector3(0, 0.8f, 0); // Centered above the cooking equipment
+                readySpot = readyContainer.transform;
+            }
+            
+            // Create or update the ready item
+            GameObject readyObj;
+            if (itemObjects.ContainsKey(cookingEquipment.content_ready.id))
+            {
+                readyObj = itemObjects[cookingEquipment.content_ready.id];
+                readyObj.SetActive(true);
+            }
+            else
+            {
+                GameObject itemPrefab = Resources.Load<GameObject>($"Prefabs/{cookingEquipment.content_ready.type}");
+                if (itemPrefab == null)
+                {
+                    itemPrefab = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+                    itemPrefab.name = $"Item_{cookingEquipment.content_ready.type}_Default";
+                }
+                readyObj = Instantiate(itemPrefab);
+                readyObj.name = $"Item_{cookingEquipment.content_ready.type}_{cookingEquipment.content_ready.id}";
+                itemObjects[cookingEquipment.content_ready.id] = readyObj;
+            }
+            
+            readyObj.transform.SetParent(readySpot, false);
+            readyObj.transform.localPosition = Vector3.zero;
+            readyObj.transform.localScale = new Vector3(0.5f, 0.5f, 0.5f);
+            
+            // Add a visual indicator that this item is ready (like a glow or different color)
+            AddReadyIndicator(readyObj);
+        }
+        else
+        {
+            // No content_ready - hide the ready spot
+            Transform readySpot = cookingEquipmentObj.transform.Find("ReadySpot");
+            if (readySpot != null)
+            {
+                foreach (Transform child in readySpot)
+                {
+                    child.gameObject.SetActive(false);
+                }
+            }
+        }
+    }
+    
+    private void AddReadyIndicator(GameObject readyItem)
+    {
+        // Add a visual indicator that the item is ready for pickup
+        Renderer renderer = readyItem.GetComponent<Renderer>();
+        if (renderer != null)
+        {
+            // Add a subtle glow or highlight
+            Material material = renderer.material;
+            if (material != null)
+            {
+                // Enable emission to make it glow
+                material.EnableKeyword("_EMISSION");
+                material.SetColor("_EmissionColor", Color.green * 0.3f);
+            }
+        }
+        
+        // TODO: Add ReadyItemIndicator component once compilation issues are resolved
+        // The component will provide a gentle bobbing animation
     }
 }
